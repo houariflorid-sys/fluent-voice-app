@@ -1,0 +1,6 @@
+{
+  "name": " HOUARI PHD ADRAR  تعلم الإنجليزية بالصوت والصورة والمحادثة الحية",
+  "description": "تطبيق متكامل لتعلم اللغة الإنجليزية بالصوت والصورة، والمحادثة الصوتية المباشرة (Gemini Live API)، وشات بوت تعليمي بأدوار متعددة مع دعم البحث والخرائط، وتوليد وتعديل الصور التوضيحية وتوليد الفيديوهات التفاعلية مع Veo والتفريغ الصوتي الذكي وربط Firebase للبيانات والمصادقة.",
+  "requestFramePermissions": ["microphone"],
+  "majorCapabilities": ["MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"]
+}
