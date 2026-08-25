@@ -275,7 +275,7 @@ app.post("/api/generate-image", async (req, res) => {
     }
 
     const response = await ai.models.generateContent({
-      model: "gemini-2.0-flash-image-preview",
+      model: "gemini-2.0-flash",
       contents: { parts },
       config: {
         imageConfig: {
