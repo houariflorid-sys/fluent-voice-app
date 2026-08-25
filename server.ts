@@ -49,13 +49,13 @@ app.post("/api/chat", async (req, res) => {
     } = req.body;
 
     // Determine Model selection based on user requirements
-    let selectedModel = "gemini-3.5-flash";
+    let selectedModel = "gemini-2.0-flash";
     if (modelChoice === "pro" || tutorRole === "ielts_examiner" || tutorRole === "business_coach") {
       selectedModel = "gemini-3.1-pro-preview";
     } else if (modelChoice === "lite") {
       selectedModel = "gemini-3.1-flash-lite";
     } else {
-      selectedModel = "gemini-3.5-flash";
+      selectedModel = "gemini-2.0-flash";
     }
 
     // Role personas
@@ -92,12 +92,12 @@ Guidelines:
     // Setup Tools for Grounding (Search or Maps)
     const tools: any[] = [];
     if (enableMaps) {
-      // Maps Grounding using gemini-3.5-flash
-      selectedModel = "gemini-3.5-flash";
+      // Maps Grounding using gemini-2.0-flash
+      selectedModel = "gemini-2.0-flash";
       tools.push({ googleMaps: {} });
     } else if (enableSearch) {
-      // Search Grounding using gemini-3.5-flash
-      selectedModel = "gemini-3.5-flash";
+      // Search Grounding using gemini-2.0-flash
+      selectedModel = "gemini-2.0-flash";
       tools.push({ googleSearch: {} });
     }
 
@@ -187,7 +187,7 @@ Guidelines:
 });
 
 // -------------------------------------------------------------
-// 2. Audio Transcription using gemini-3.5-flash
+// 2. Audio Transcription using gemini-2.0-flash
 // -------------------------------------------------------------
 app.post("/api/transcribe-audio", async (req, res) => {
   try {
@@ -199,7 +199,7 @@ app.post("/api/transcribe-audio", async (req, res) => {
     const base64Clean = audioData.replace(/^data:audio\/\w+;base64,/, "");
 
     const response = await ai.models.generateContent({
-      model: "gemini-3.5-flash",
+      model: "gemini-2.0-flash",
       contents: {
         parts: [
           {
@@ -245,7 +245,7 @@ app.post("/api/transcribe-audio", async (req, res) => {
 });
 
 // -------------------------------------------------------------
-// 3. Create & Edit Images using gemini-3.1-flash-image-preview
+// 3. Create & Edit Images using gemini-2.0-flash-image-preview
 // Supports Text-to-Image and Image Editing with Text Prompts
 // -------------------------------------------------------------
 app.post("/api/generate-image", async (req, res) => {
@@ -275,7 +275,7 @@ app.post("/api/generate-image", async (req, res) => {
     }
 
     const response = await ai.models.generateContent({
-      model: "gemini-3.1-flash-image-preview",
+      model: "gemini-2.0-flash-image-preview",
       contents: { parts },
       config: {
         imageConfig: {
@@ -439,7 +439,7 @@ Requirements:
 6. 1 cultural / practical speaking tip in Arabic.`;
 
     const response = await ai.models.generateContent({
-      model: "gemini-3.7-flash",
+      model: "gemini-2.0-flash",
       contents: `Create a dialogue scenario for: ${topicPrompt || "Coffee Shop"} (${difficulty} level)`,
       config: {
         systemInstruction,
@@ -516,7 +516,7 @@ app.post("/api/analyze-pronunciation", async (req, res) => {
     const { targetText, userSpokenText, targetPhonetic } = req.body;
 
     const response = await ai.models.generateContent({
-      model: "gemini-3.7-flash",
+      model: "gemini-2.0-flash",
       contents: `Target sentence: "${targetText}"
 Target phonetic guide: "${targetPhonetic || ""}"
 What the user pronounced/speech-to-text recognized: "${userSpokenText}"
@@ -603,7 +603,7 @@ Requirements:
 9. "speakingTimeLimitSeconds": Recommended speaking duration (e.g., 30 for beginner, 45 for intermediate, 60 for advanced).`;
 
     const response = await ai.models.generateContent({
-      model: "gemini-3.7-flash",
+      model: "gemini-2.0-flash",
       contents: `Generate a speaking challenge for ${topic} at ${difficulty} level.`,
       config: {
         systemInstruction,
@@ -714,7 +714,7 @@ Perform an in-depth, supportive, and rigorous pedagogical analysis:
 9. xpEarned: Calculate XP reward (30-60 XP based on effort and score).`;
 
     const response = await ai.models.generateContent({
-      model: "gemini-3.7-flash",
+      model: "gemini-2.0-flash",
       contents: `Evaluate this spoken response: "${userTranscript}" for question: "${questionEn}"`,
       config: {
         systemInstruction,
