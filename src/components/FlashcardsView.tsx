@@ -339,7 +339,7 @@ const handleAiWordLookup = async () => {
               );
             })}
           </div>
-        </>
+        
       ) : (
         /* Visual Interactive Quiz Mode */
         <div className="max-w-2xl mx-auto bg-white dark:bg-slate-900 rounded-3xl border border-slate-200/90 dark:border-slate-800 shadow-md p-6 sm:p-8 space-y-6">
@@ -471,9 +471,4 @@ const handleAiWordLookup = async () => {
                 </button>
               </div>
             </div>
-          )}
-        </div>
-      )}
-    </div>
   );
-};
