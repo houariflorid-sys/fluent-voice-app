@@ -344,7 +344,7 @@ export const FlashcardsView: React.FC<FlashcardsViewProps> = ({
       .sort(() => 0.5 - Math.random())
       .slice(0, 3);
     return [card.word, ...distractors].sort(() => 0.5 - Math.random());
-  };
+  
 
   const currentOptions = currentQuizCard ? generateOptions(currentQuizCard) : [];
 
