@@ -862,5 +862,49 @@ Speak in short, encouraging English sentences. Speak clearly and help the learne
     console.log(`FluentVoice English App running on http://localhost:${PORT}`);
   });
 }
+// -------------------------------------------------------------
+// مسار البحث الديناميكي وتوليد البطاقات التعليمية للكلمات الجديدة
+// -------------------------------------------------------------
+app.post("/api/lookup-word", async (req, res) => {
+  try {
+    const { word } = req.body;
 
+    if (!word) {
+      return res.status(400).json({ error: "Word is required" });
+    }
+
+    const prompt = `Create an educational flashcard object for the English word/term: "${word}". 
+    Provide the response strictly in a clean JSON format with the following keys:
+    {
+      "word": "${word}",
+      "translation": "Arabic translation here",
+      "category": "General",
+      "phonetic": "pronunciation guide",
+      "definition": "Simple English definition",
+      "example": "A clear practical sentence using the word",
+      "arabicExample": "Arabic translation of the example",
+      "imagePrompt": "A vivid description for visual learning"
+    }`;
+
+    const response = await ai.models.generateContent({
+      model: "gemini-2.0-flash",
+      contents: prompt,
+    });
+
+    const responseText = response.text || "{}";
+    const cleanJsonText = responseText.replace(/```json/g, "").replace(/```/g, "").trim();
+    const cardData = JSON.parse(cleanJsonText);
+
+    return res.json({
+      success: true,
+      card: cardData,
+    });
+  } catch (error: any) {
+    console.error("Lookup word error:", error);
+    return res.status(500).json({
+      error: "Failed to generate card for this word",
+      details: error?.message || "Unknown error",
+    });
+  }
+});
 startServer();

@@ -114,7 +114,39 @@ export const FlashcardsView: React.FC<FlashcardsViewProps> = ({
       .slice(0, 3);
     return [card.word, ...distractors].sort(() => 0.5 - Math.random());
   };
+// دالة البحث الديناميكي وتوليد البطاقة وتخزينها محلياً للأبد
+const handleAiWordLookup = async () => {
+  if (!searchQuery.trim()) return;
+  
+  // تحقق أولاً هل الكلمة موجودة في القائمة الحالية
+  const exists = cards.some(c => 
+    c.word.toLowerCase().includes(searchQuery.toLowerCase()) || 
+    c.translation.includes(searchQuery)
+  );
 
+  if (exists) {
+    return; // الكلمة موجودة مسبقاً، الفلترة العادية ستظهرها
+  }
+
+  try {
+    const res = await fetch("/api/lookup-word", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ word: searchQuery.trim() }),
+    });
+    const data = await res.json();
+    
+    if (data.success && data.card) {
+      // إضافة الكلمة الجديدة للقائمة وحفظها في LocalStorage للأبد
+      const updatedCards = [data.card, ...cards];
+      setCards(updatedCards);
+      localStorage.setItem("user_custom_flashcards", JSON.stringify(updatedCards));
+      alert(`تم توليد وتعلم كلمة "${searchQuery}" بنجاح وأصبحت مخزنة في قاموسك الشخصي!`);
+    }
+  } catch (err) {
+    console.error("Error looking up word:", err);
+  }
+};
   const currentOptions = currentQuizCard ? generateOptions(currentQuizCard) : [];
 
   return (
@@ -182,18 +214,27 @@ export const FlashcardsView: React.FC<FlashcardsViewProps> = ({
               ))}
             </div>
 
-            {/* Search Input */}
-            <div className="relative w-full sm:w-64">
-              <input
-                type="text"
-                value={searchQuery}
-                onChange={(e) => setSearchQuery(e.target.value)}
-                placeholder="ابحث بالعربية أو الإنجليزية..."
-                className="w-full pl-3 pr-9 py-2 rounded-xl bg-white dark:bg-slate-800 border border-slate-200 dark:border-slate-700 text-xs font-medium text-slate-800 dark:text-white placeholder-slate-400 dark:placeholder-slate-500 focus:outline-hidden focus:ring-2 focus:ring-blue-500"
-              />
-              <Search className="w-4 h-4 text-slate-400 absolute right-3 top-2.5" />
-            </div>
-          </div>
+{/* Search Input & AI Lookup Button */}
+<div className="flex flex-col sm:flex-row items-center gap-2 w-full sm:w-auto">
+  <div className="relative w-full sm:w-64">
+    <input
+      type="text"
+      value={searchQuery}
+      onChange={(e) => setSearchQuery(e.target.value)}
+      placeholder="ابحث بالعربية أو الإنجليزية..."
+      className="w-full pl-3 pr-9 py-2 rounded-xl text-xs font-bold bg-white dark:bg-slate-800 text-slate-800 dark:text-slate-100 border border-slate-200 dark:border-slate-700 focus:outline-none focus:ring-2 focus:ring-blue-500"
+    />
+    <Search className="w-4 h-4 text-slate-400 absolute left-3 top-2.5" />
+  </div>
+
+  {/* زر توليد الكلمة بالذكاء الاصطناعي */}
+  <button 
+    onClick={handleAiWordLookup}
+    className="w-full sm:w-auto px-4 py-2 bg-blue-600 hover:bg-blue-700 text-white text-xs font-bold rounded-xl transition-all cursor-pointer whitespace-nowrap shadow-xs"
+  >
+    ✨ ابحث وتعلّم بالذكاء الاصطناعي
+  </button>
+</div>
 
           {/* Cards Grid */}
           <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-6">
