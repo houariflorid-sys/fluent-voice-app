@@ -471,4 +471,5 @@ const handleAiWordLookup = async () => {
                 </button>
               </div>
             </div>
-  );
+ );
+};
