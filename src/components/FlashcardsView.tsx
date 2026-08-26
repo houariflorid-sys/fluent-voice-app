@@ -141,7 +141,7 @@ const handleAiWordLookup = async () => {
 };
   const currentOptions = currentQuizCard ? generateOptions(currentQuizCard) : [];
 
-  return (
+ return (
     <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-6 space-y-8">
       {/* Header Banner & Mode Switch */}
       <div className="flex flex-col md:flex-row md:items-center justify-between gap-4 bg-gradient-to-r from-blue-600 via-indigo-600 to-purple-600 rounded-3xl p-6 sm:p-8 text-white shadow-lg shadow-blue-500/10">
@@ -178,7 +178,7 @@ const handleAiWordLookup = async () => {
       </div>
 
       {!quizMode ? (
-        <>
+        <div className="space-y-6">
           {/* Filters & Search */}
           <div className="flex flex-col sm:flex-row items-center justify-between gap-4">
             {/* Category tabs */}
@@ -206,26 +206,27 @@ const handleAiWordLookup = async () => {
               ))}
             </div>
 
-{/* Search Input & AI Lookup Button */}
-<div className="flex flex-col sm:flex-row items-center gap-2 w-full sm:w-auto">
-  <div className="relative w-full sm:w-64">
-    <input
-      type="text"
-      value={searchQuery}
-      onChange={(e) => setSearchQuery(e.target.value)}
-      placeholder="ابحث بالعربية أو الإنجليزية..."
-      className="w-full pl-3 pr-9 py-2 rounded-xl text-xs font-bold bg-white dark:bg-slate-800 text-slate-800 dark:text-slate-100 border border-slate-200 dark:border-slate-700 focus:outline-none focus:ring-2 focus:ring-blue-500"
-    />
-    <Search className="w-4 h-4 text-slate-400 absolute left-3 top-2.5" />
-  </div>
+            {/* Search Input & AI Lookup Button */}
+            <div className="flex flex-col sm:flex-row items-center gap-2 w-full sm:w-auto">
+              <div className="relative w-full sm:w-64">
+                <input
+                  type="text"
+                  value={searchQuery}
+                  onChange={(e) => setSearchQuery(e.target.value)}
+                  placeholder="ابحث بالعربية أو الإنجليزية..."
+                  className="w-full pl-3 pr-9 py-2 rounded-xl text-xs font-bold bg-white dark:bg-slate-800 text-slate-800 dark:text-slate-100 border border-slate-200 dark:border-slate-700 focus:outline-none focus:ring-2 focus:ring-blue-500"
+                />
+                <Search className="w-4 h-4 text-slate-400 absolute left-3 top-2.5" />
+              </div>
 
-  <button 
-    onClick={handleAiWordLookup}
-    className="w-full sm:w-auto px-4 py-2 bg-blue-600 hover:bg-blue-700 text-white text-xs font-bold rounded-xl transition-all cursor-pointer whitespace-nowrap shadow-xs"
-  >
-    ✨ ابحث وتعلّم بالذكاء الاصطناعي
-  </button>
-</div>
+              <button 
+                onClick={handleAiWordLookup}
+                className="w-full sm:w-auto px-4 py-2 bg-blue-600 hover:bg-blue-700 text-white text-xs font-bold rounded-xl transition-all cursor-pointer whitespace-nowrap shadow-xs"
+              >
+                ✨ ابحث وتعلّم بالذكاء الاصطناعي
+              </button>
+            </div>
+          </div>
 
           {/* Cards Grid */}
           <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-6">
@@ -339,7 +340,7 @@ const handleAiWordLookup = async () => {
               );
             })}
           </div>
-        
+        </div>
       ) : (
         /* Visual Interactive Quiz Mode */
         <div className="max-w-2xl mx-auto bg-white dark:bg-slate-900 rounded-3xl border border-slate-200/90 dark:border-slate-800 shadow-md p-6 sm:p-8 space-y-6">
@@ -467,9 +468,13 @@ const handleAiWordLookup = async () => {
                   onClick={() => setQuizMode(false)}
                   className="px-5 py-2.5 rounded-xl bg-slate-100 dark:bg-slate-800 text-slate-700 dark:text-slate-300 font-bold text-xs hover:bg-slate-200 dark:hover:bg-slate-700 cursor-pointer"
                 >
-                  العودة للبطاقات
+                   العودة للبطاقات
                 </button>
-               </div>
               </div>
-              )
-             }
+            </div>
+          )}
+        </div>
+      )}
+    </div>
+  );
+};
