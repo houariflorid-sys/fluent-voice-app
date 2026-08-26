@@ -295,7 +295,7 @@ app.post("/api/generate-image", async (req, res) => {
     }
 
     res.json({ imageUrl, description: descriptionText, prompt });
-  } catch (error: any) {
+   catch (error: any) {
     console.error("Image generation error:", error);
     res.status(500).json({
       error: "Failed to generate or edit image",
