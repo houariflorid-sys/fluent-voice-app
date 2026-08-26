@@ -20,6 +20,7 @@ import {
 } from "lucide-react";
 import { FlashcardItem } from "../types";
 import { playEnglishAudio, soundFX } from "../utils/audio";
+import { createClientFallbackFlashcard, CATEGORY_IMAGES } from "../utils/cardGenerator";
 
 interface FlashcardsViewProps {
   flashcards: FlashcardItem[];
@@ -45,6 +46,18 @@ export const FlashcardsView: React.FC<FlashcardsViewProps> = ({
 
   const searchContainerRef = useRef<HTMLDivElement>(null);
 
+  // Synchronized cards list for instant local rendering
+  const [cardsList, setCardsList] = useState<FlashcardItem[]>(flashcards);
+
+  useEffect(() => {
+    setCardsList((prev) => {
+      const map = new Map<string, FlashcardItem>();
+      flashcards.forEach((c) => map.set(c.word.toLowerCase(), c));
+      prev.forEach((c) => map.set(c.word.toLowerCase(), c));
+      return Array.from(map.values());
+    });
+  }, [flashcards]);
+
   // Quiz Mode state
   const [quizMode, setQuizMode] = useState<boolean>(false);
   const [quizIndex, setQuizIndex] = useState<number>(0);
@@ -66,7 +79,7 @@ export const FlashcardsView: React.FC<FlashcardsViewProps> = ({
   }, []);
 
   // Filtered Cards
-  const filteredCards = flashcards.filter((card) => {
+  const filteredCards = cardsList.filter((card) => {
     if (selectedCategory === "mastered") {
       if (!masteredWords.includes(card.id)) return false;
     } else if (selectedCategory === "ai_generated") {
@@ -80,7 +93,7 @@ export const FlashcardsView: React.FC<FlashcardsViewProps> = ({
     const query = searchQuery.toLowerCase().trim();
     return (
       card.word.toLowerCase().includes(query) ||
-      card.arabicMeaning.includes(query) ||
+      card.arabicMeaning.toLowerCase().includes(query) ||
       card.arabicPhonetics.includes(query) ||
       card.exampleEn.toLowerCase().includes(query) ||
       card.exampleAr.includes(query)
@@ -90,7 +103,7 @@ export const FlashcardsView: React.FC<FlashcardsViewProps> = ({
   // Autocomplete Suggestions while typing
   const cleanSearch = searchQuery.trim().toLowerCase();
   const suggestions = cleanSearch
-    ? flashcards.filter(
+    ? cardsList.filter(
         (c) =>
           c.word.toLowerCase().includes(cleanSearch) ||
           c.arabicMeaning.includes(cleanSearch) ||
@@ -98,7 +111,7 @@ export const FlashcardsView: React.FC<FlashcardsViewProps> = ({
       ).slice(0, 6)
     : [];
 
-  const exactMatchCard = flashcards.find(
+  const exactMatchCard = cardsList.find(
     (c) =>
       c.word.toLowerCase() === cleanSearch ||
       c.arabicMeaning.trim() === searchQuery.trim()
@@ -163,26 +176,34 @@ export const FlashcardsView: React.FC<FlashcardsViewProps> = ({
       return;
     }
 
-    // 2. Generate via Gemini backend API
+    // 2. Generate via Gemini backend API or Instant Lexical Synthesizer
     setIsSearchingAi(true);
     setStatusMessage({
       type: "info",
-      text: `جارِ البحث والتحليل وتوليد بطاقة مصورة تفاعلية لكلمة "${term}" بالذكاء الاصطناعي...`,
+      text: `جارِ البحث والتحليل وتوليد بطاقة مصورة تفاعلية لكلمة "${term}"...`,
     });
 
     try {
-      const response = await fetch("/api/generate-flashcard", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ query: term }),
-      });
+      let generatedCard: FlashcardItem | null = null;
 
-      if (!response.ok) {
-        const errJson = await response.json().catch(() => ({}));
-        throw new Error(errJson.details || errJson.error || "حدث خطأ أثناء الاتصال بالخادم وتوليد البطاقة");
+      try {
+        const response = await fetch("/api/generate-flashcard", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ query: term }),
+        });
+
+        if (response.ok) {
+          generatedCard = await response.json();
+        }
+      } catch (netErr) {
+        console.warn("Backend API not reachable (e.g., static hosting), using client generator:", netErr);
       }
 
-      const generatedCard: FlashcardItem = await response.json();
+      // If backend failed or returned incomplete, use the client educational generator
+      if (!generatedCard || !generatedCard.word) {
+        generatedCard = await createClientFallbackFlashcard(term);
+      }
 
       if (onAddFlashcard) {
         onAddFlashcard(generatedCard);
@@ -202,11 +223,26 @@ export const FlashcardsView: React.FC<FlashcardsViewProps> = ({
       });
     } catch (err: any) {
       console.error("AI flashcard generation error:", err);
-      soundFX.playEncouragement();
-      setStatusMessage({
-        type: "error",
-        text: err?.message || "تعذر توليد البطاقة حالياً، يرجى المحاولة مرة أخرى.",
-      });
+      // Final resilient safety
+      try {
+        const fallbackCard = await createClientFallbackFlashcard(term);
+        if (onAddFlashcard) onAddFlashcard(fallbackCard);
+        onAddXp(25);
+        soundFX.playSuccess();
+        setSelectedCategory("all");
+        setSearchQuery(fallbackCard.word);
+        scrollToCard(fallbackCard.id);
+        setStatusMessage({
+          type: "success",
+          text: `🎉 تم توليد بطاقة "${fallbackCard.word}" (${fallbackCard.arabicMeaning}) بنجاح! (+25 XP)`,
+        });
+      } catch {
+        soundFX.playEncouragement();
+        setStatusMessage({
+          type: "error",
+          text: "تعذر إتمام التوليد، يرجى المحاولة مرة أخرى.",
+        });
+      }
     } finally {
       setIsSearchingAi(false);
     }
@@ -242,7 +278,7 @@ export const FlashcardsView: React.FC<FlashcardsViewProps> = ({
 
   // Next Quiz Question
   const handleNextQuestion = () => {
-    if (quizIndex + 1 < flashcards.length) {
+    if (quizIndex + 1 < cardsList.length) {
       setQuizIndex((prev) => prev + 1);
       setSelectedOption(null);
       setIsAnswerChecked(false);
@@ -255,9 +291,9 @@ export const FlashcardsView: React.FC<FlashcardsViewProps> = ({
   };
 
   // Quiz Options generator
-  const currentQuizCard = flashcards[quizIndex] || flashcards[0];
+  const currentQuizCard = cardsList[quizIndex] || cardsList[0];
   const generateOptions = (card: FlashcardItem) => {
-    const distractors = flashcards
+    const distractors = cardsList
       .filter((c) => c.id !== card.id)
       .map((c) => c.word)
       .sort(() => 0.5 - Math.random())
@@ -518,7 +554,7 @@ export const FlashcardsView: React.FC<FlashcardsViewProps> = ({
           {/* Cards Count and Active Filters Notice */}
           <div className="flex items-center justify-between text-xs text-slate-500 dark:text-slate-400 font-bold px-1">
             <span>
-              عرض {filteredCards.length} من أصل {flashcards.length} بطاقة
+              عرض {filteredCards.length} من أصل {cardsList.length} بطاقة
             </span>
             {searchQuery && (
               <button
@@ -555,6 +591,13 @@ export const FlashcardsView: React.FC<FlashcardsViewProps> = ({
                         alt={card.word}
                         className="w-full h-full object-cover group-hover:scale-105 transition-transform duration-500"
                         referrerPolicy="no-referrer"
+                        onError={(e) => {
+                          const target = e.currentTarget;
+                          const fallback = CATEGORY_IMAGES[card.category] || CATEGORY_IMAGES.general;
+                          if (target.src !== fallback) {
+                            target.src = fallback;
+                          }
+                        }}
                       />
                       <div className="absolute inset-0 bg-gradient-to-t from-black/70 via-black/20 to-transparent" />
 
@@ -694,7 +737,7 @@ export const FlashcardsView: React.FC<FlashcardsViewProps> = ({
               {/* Quiz Header */}
               <div className="flex items-center justify-between text-xs font-bold text-slate-500 dark:text-slate-400 border-b border-slate-100 dark:border-slate-800 pb-4">
                 <span>
-                  السؤال {quizIndex + 1} من {flashcards.length}
+                  السؤال {quizIndex + 1} من {cardsList.length}
                 </span>
                 <span className="px-3 py-1 rounded-full bg-blue-50 dark:bg-blue-950 text-blue-700 dark:text-blue-300">
                   النقاط: {quizScore}
@@ -708,6 +751,13 @@ export const FlashcardsView: React.FC<FlashcardsViewProps> = ({
                   alt="Quiz visual"
                   className="w-full h-full object-cover"
                   referrerPolicy="no-referrer"
+                  onError={(e) => {
+                    const target = e.currentTarget;
+                    const fallback = CATEGORY_IMAGES[currentQuizCard.category] || CATEGORY_IMAGES.general;
+                    if (target.src !== fallback) {
+                      target.src = fallback;
+                    }
+                  }}
                 />
                 <div className="absolute inset-0 bg-gradient-to-t from-black/70 via-transparent to-transparent flex items-end p-4">
                   <div className="text-white space-y-0.5">
