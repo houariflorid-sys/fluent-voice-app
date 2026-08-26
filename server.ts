@@ -272,38 +272,11 @@ app.post("/api/generate-image", async (req, res) => {
   } catch (error: any) {
     console.error("Image generation error:", error);
     return res.status(500).json({
-      error: "Failed to download video",
+      error: "Failed to generate image",
       details: error?.message || "Unknown error",
     });
   }
 });
-
-    let imageUrl: string | null = null;
-    let descriptionText = "";
-
-    const candidates = response.candidates?.[0]?.content?.parts || [];
-    for (const part of candidates) {
-      if (part.inlineData?.data) {
-        imageUrl = `data:image/png;base64,${part.inlineData.data}`;
-      } else if (part.text) {
-        descriptionText += part.text;
-      }
-    }
-
-    if (!imageUrl) {
-      return res.status(500).json({ error: "No image was returned by the model", details: descriptionText });
-    }
-
-    res.json({ imageUrl, description: descriptionText, prompt });
-   catch (error: any) 
-    console.error("Image generation error:", error);
-    res.status(500).json({
-      error: "Failed to generate or edit image",
-      details: error?.message || "Unknown error",
-    });
-  }
-});
-
 // -------------------------------------------------------------
 // 4. Veo 3 Video Generation (Text to Video & Image to Video)
 // Uses model: veo-3.1-fast-generate-preview
