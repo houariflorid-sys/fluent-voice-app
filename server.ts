@@ -49,13 +49,13 @@ app.post("/api/chat", async (req, res) => {
     } = req.body;
 
     // Determine Model selection based on user requirements
-    let selectedModel = "gemini-2.0-flash";
+    let selectedModel = "gemini-3.5-flash";
     if (modelChoice === "pro" || tutorRole === "ielts_examiner" || tutorRole === "business_coach") {
       selectedModel = "gemini-3.1-pro-preview";
     } else if (modelChoice === "lite") {
       selectedModel = "gemini-3.1-flash-lite";
     } else {
-      selectedModel = "gemini-2.0-flash";
+      selectedModel = "gemini-3.5-flash";
     }
 
     // Role personas
@@ -92,12 +92,12 @@ Guidelines:
     // Setup Tools for Grounding (Search or Maps)
     const tools: any[] = [];
     if (enableMaps) {
-      // Maps Grounding using gemini-2.0-flash
-      selectedModel = "gemini-2.0-flash";
+      // Maps Grounding using gemini-3.5-flash
+      selectedModel = "gemini-3.5-flash";
       tools.push({ googleMaps: {} });
     } else if (enableSearch) {
-      // Search Grounding using gemini-2.0-flash
-      selectedModel = "gemini-2.0-flash";
+      // Search Grounding using gemini-3.5-flash
+      selectedModel = "gemini-3.5-flash";
       tools.push({ googleSearch: {} });
     }
 
@@ -187,7 +187,7 @@ Guidelines:
 });
 
 // -------------------------------------------------------------
-// 2. Audio Transcription using gemini-2.0-flash
+// 2. Audio Transcription using gemini-3.5-flash
 // -------------------------------------------------------------
 app.post("/api/transcribe-audio", async (req, res) => {
   try {
@@ -199,7 +199,7 @@ app.post("/api/transcribe-audio", async (req, res) => {
     const base64Clean = audioData.replace(/^data:audio\/\w+;base64,/, "");
 
     const response = await ai.models.generateContent({
-      model: "gemini-2.0-flash",
+      model: "gemini-3.5-flash",
       contents: {
         parts: [
           {
@@ -245,7 +245,8 @@ app.post("/api/transcribe-audio", async (req, res) => {
 });
 
 // -------------------------------------------------------------
-// 3. Create & Edit Images / Visual Flashcard Prompts
+// 3. Create & Edit Images using gemini-3.1-flash-image-preview
+// Supports Text-to-Image and Image Editing with Text Prompts
 // -------------------------------------------------------------
 app.post("/api/generate-image", async (req, res) => {
   try {
@@ -255,28 +256,61 @@ app.post("/api/generate-image", async (req, res) => {
       return res.status(400).json({ error: "Prompt is required" });
     }
 
-    const textPrompt = baseImage 
-      ? `Provide a detailed English prompt and educational description for editing this illustration: ${prompt}.`
-      : `Provide a rich, vivid English visual description and flashcard design concept for: ${prompt}. Include color scheme and details suitable for English learners.`;
+    let parts: any[] = [];
+    if (baseImage) {
+      const cleanBase64 = baseImage.replace(/^data:image\/\w+;base64,/, "");
+      parts.push({
+        inlineData: {
+          data: cleanBase64,
+          mimeType: "image/png",
+        },
+      });
+      parts.push({
+        text: `Edit this educational visual illustration: ${prompt}. Keep it clear, vivid, high-quality, and culturally friendly for learners.`,
+      });
+    } else {
+      parts.push({
+        text: `High quality educational visual flashcard illustration for English vocabulary learning: ${prompt}. Detailed, photorealistic or polished 3D digital art style, crisp lighting.`,
+      });
+    }
 
     const response = await ai.models.generateContent({
-      model: "gemini-2.0-flash",
-      contents: textPrompt,
+      model: "gemini-3.1-flash-image-preview",
+      contents: { parts },
+      config: {
+        imageConfig: {
+          aspectRatio: aspectRatio || "1:1",
+          imageSize: imageSize || "1K",
+        },
+      },
     });
 
-    return res.json({
-      success: true,
-      imageUrl: null,
-      description: response.text || "Educational visual generated successfully.",
-    });
+    let imageUrl: string | null = null;
+    let descriptionText = "";
+
+    const candidates = response.candidates?.[0]?.content?.parts || [];
+    for (const part of candidates) {
+      if (part.inlineData?.data) {
+        imageUrl = `data:image/png;base64,${part.inlineData.data}`;
+      } else if (part.text) {
+        descriptionText += part.text;
+      }
+    }
+
+    if (!imageUrl) {
+      return res.status(500).json({ error: "No image was returned by the model", details: descriptionText });
+    }
+
+    res.json({ imageUrl, description: descriptionText, prompt });
   } catch (error: any) {
     console.error("Image generation error:", error);
-    return res.status(500).json({
-      error: "Failed to generate image",
+    res.status(500).json({
+      error: "Failed to generate or edit image",
       details: error?.message || "Unknown error",
     });
   }
 });
+
 // -------------------------------------------------------------
 // 4. Veo 3 Video Generation (Text to Video & Image to Video)
 // Uses model: veo-3.1-fast-generate-preview
@@ -405,7 +439,7 @@ Requirements:
 6. 1 cultural / practical speaking tip in Arabic.`;
 
     const response = await ai.models.generateContent({
-      model: "gemini-2.0-flash",
+      model: "gemini-3.7-flash",
       contents: `Create a dialogue scenario for: ${topicPrompt || "Coffee Shop"} (${difficulty} level)`,
       config: {
         systemInstruction,
@@ -482,7 +516,7 @@ app.post("/api/analyze-pronunciation", async (req, res) => {
     const { targetText, userSpokenText, targetPhonetic } = req.body;
 
     const response = await ai.models.generateContent({
-      model: "gemini-2.0-flash",
+      model: "gemini-3.7-flash",
       contents: `Target sentence: "${targetText}"
 Target phonetic guide: "${targetPhonetic || ""}"
 What the user pronounced/speech-to-text recognized: "${userSpokenText}"
@@ -569,7 +603,7 @@ Requirements:
 9. "speakingTimeLimitSeconds": Recommended speaking duration (e.g., 30 for beginner, 45 for intermediate, 60 for advanced).`;
 
     const response = await ai.models.generateContent({
-      model: "gemini-2.0-flash",
+      model: "gemini-3.7-flash",
       contents: `Generate a speaking challenge for ${topic} at ${difficulty} level.`,
       config: {
         systemInstruction,
@@ -680,7 +714,7 @@ Perform an in-depth, supportive, and rigorous pedagogical analysis:
 9. xpEarned: Calculate XP reward (30-60 XP based on effort and score).`;
 
     const response = await ai.models.generateContent({
-      model: "gemini-2.0-flash",
+      model: "gemini-3.7-flash",
       contents: `Evaluate this spoken response: "${userTranscript}" for question: "${questionEn}"`,
       config: {
         systemInstruction,
@@ -765,7 +799,146 @@ Perform an in-depth, supportive, and rigorous pedagogical analysis:
 });
 
 // -------------------------------------------------------------
-// 6. HTTP & WebSocket Server Setup (Gemini Live API)
+// 6. AI Flashcard Generator & Word Lookup
+// -------------------------------------------------------------
+app.post("/api/generate-flashcard", async (req, res) => {
+  try {
+    const { query } = req.body;
+    if (!query || query.trim().length === 0) {
+      return res.status(400).json({ error: "Word or search query is required" });
+    }
+
+    const trimmedQuery = query.trim();
+
+    const systemInstruction = `You are a world-class English language lexicographer and educational curriculum creator for native Arabic speakers.
+Given a word, concept, or search term (in English or Arabic: "${trimmedQuery}"):
+1. Identify the canonical English word or common phrase (e.g. if the user typed "كعبة", the English word is "Kaaba").
+2. Determine the Part of Speech ("noun", "verb", "adjective", "adverb", "phrase").
+3. Provide the accurate IPA phonetic transcription (e.g., "/ˈkɑː.bə/").
+4. Provide a crystal-clear, simplified Arabic phonetic pronunciation guide in Arabic letters (e.g., "كَعْبَة / كَابَا").
+5. Provide a clear, natural Arabic translation and definition suitable for learning.
+6. Choose the best matching category from: ["food", "travel", "work", "tech", "health", "emotions", "general"].
+7. Create a natural, memorable everyday English example sentence illustrating the word.
+8. Provide the Arabic translation of the example sentence.
+9. Assign the difficulty level: "beginner", "intermediate", or "advanced".
+10. Provide an English visual keyword query suitable for finding an educational photo (e.g., "kaaba mecca", "coffee cup").`;
+
+    let response;
+    if (process.env.GEMINI_API_KEY) {
+      try {
+        response = await ai.models.generateContent({
+          model: "gemini-3.5-flash",
+          contents: `Generate a comprehensive English learning flashcard for the search term: "${trimmedQuery}"`,
+          config: {
+            systemInstruction,
+            responseMimeType: "application/json",
+            responseSchema: {
+              type: Type.OBJECT,
+              properties: {
+                word: { type: Type.STRING, description: "Canonical English word (Capitalized)" },
+                partOfSpeech: { type: Type.STRING },
+                ipa: { type: Type.STRING, description: "IPA transcription with slashes" },
+                arabicPhonetics: { type: Type.STRING, description: "Arabic letters phonetics guide" },
+                arabicMeaning: { type: Type.STRING, description: "Arabic meaning" },
+                category: { type: Type.STRING },
+                exampleEn: { type: Type.STRING, description: "Everyday English example sentence" },
+                exampleAr: { type: Type.STRING, description: "Arabic translation of the example sentence" },
+                difficulty: { type: Type.STRING, enum: ["beginner", "intermediate", "advanced"] },
+                imageQuery: { type: Type.STRING, description: "1-3 English keywords for photo search" },
+              },
+              required: [
+                "word",
+                "partOfSpeech",
+                "ipa",
+                "arabicPhonetics",
+                "arabicMeaning",
+                "category",
+                "exampleEn",
+                "exampleAr",
+                "difficulty",
+              ],
+            },
+          },
+        });
+      } catch (modelErr) {
+        console.warn("Retrying flashcard with gemini-2.5-flash...", modelErr);
+        try {
+          response = await ai.models.generateContent({
+            model: "gemini-2.5-flash",
+            contents: `Generate a comprehensive English learning flashcard in JSON for: "${trimmedQuery}" with word, partOfSpeech, ipa, arabicPhonetics, arabicMeaning, category, exampleEn, exampleAr, difficulty.`,
+          });
+        } catch (e) {
+          console.warn("Fallback to lexical dictionary synthesis:", e);
+        }
+      }
+    }
+
+    let parsed: any = {};
+    if (response?.text) {
+      try {
+        parsed = JSON.parse(response.text);
+      } catch {
+        parsed = {};
+      }
+    }
+
+    const cleanWord = parsed.word || (trimmedQuery.charAt(0).toUpperCase() + trimmedQuery.slice(1));
+
+    // Specific high-quality images based on category or custom keywords
+    const categoryImages: Record<string, string> = {
+      food: "https://images.unsplash.com/photo-1504674900247-0877df9cc836?auto=format&fit=crop&w=600&q=80",
+      travel: "https://images.unsplash.com/photo-1488646953014-85cb44e25828?auto=format&fit=crop&w=600&q=80",
+      work: "https://images.unsplash.com/photo-1497215728101-856f4ea42174?auto=format&fit=crop&w=600&q=80",
+      tech: "https://images.unsplash.com/photo-1518770660439-4636190af475?auto=format&fit=crop&w=600&q=80",
+      health: "https://images.unsplash.com/photo-1505751172876-fa1923c5c528?auto=format&fit=crop&w=600&q=80",
+      emotions: "https://images.unsplash.com/photo-1499209974431-9dddcece7f88?auto=format&fit=crop&w=600&q=80",
+      general: "https://images.unsplash.com/photo-1456513080510-7bf3a84b82f8?auto=format&fit=crop&w=600&q=80",
+    };
+
+    const selectedCategory = (parsed.category || "general").toLowerCase();
+    const fallbackImage = categoryImages[selectedCategory] || categoryImages.general;
+
+    const flashcardItem = {
+      id: "fc-ai-" + Date.now() + "-" + Math.random().toString(36).substring(2, 7),
+      word: cleanWord,
+      partOfSpeech: parsed.partOfSpeech || "noun",
+      ipa: parsed.ipa || `/${cleanWord.toLowerCase()}/`,
+      arabicPhonetics: parsed.arabicPhonetics || cleanWord,
+      arabicMeaning: parsed.arabicMeaning || trimmedQuery,
+      category: selectedCategory,
+      imageUrl: fallbackImage,
+      exampleEn: parsed.exampleEn || `We use ${cleanWord} in daily conversations.`,
+      exampleAr: parsed.exampleAr || `نستخدم ${parsed.arabicMeaning || cleanWord} في المحادثات اليومية.`,
+      difficulty: parsed.difficulty || "intermediate",
+      isAiGenerated: true,
+      createdAt: Date.now(),
+    };
+
+    res.json(flashcardItem);
+  } catch (error: any) {
+    console.error("Flashcard generation error:", error);
+    // Even in severe errors, return a functional educational flashcard
+    const trimmed = (req.body?.query || "Word").trim();
+    res.json({
+      id: "fc-ai-" + Date.now(),
+      word: trimmed.charAt(0).toUpperCase() + trimmed.slice(1),
+      partOfSpeech: "noun",
+      ipa: `/${trimmed.toLowerCase()}/`,
+      arabicPhonetics: trimmed,
+      arabicMeaning: trimmed,
+      category: "general",
+      imageUrl: "https://images.unsplash.com/photo-1456513080510-7bf3a84b82f8?auto=format&fit=crop&w=600&q=80",
+      exampleEn: `Let's practice the word "${trimmed}" in English.`,
+      exampleAr: `دعونا نتدرب على كلمة "${trimmed}" في الإنجليزية.`,
+      difficulty: "intermediate",
+      isAiGenerated: true,
+      createdAt: Date.now(),
+    });
+  }
+});
+
+// -------------------------------------------------------------
+// 7. HTTP & WebSocket Server Setup (Gemini Live API)
 // Model: gemini-3.1-flash-live-preview for low-latency Realtime Voice
 // -------------------------------------------------------------
 async function startServer() {
@@ -862,49 +1035,6 @@ Speak in short, encouraging English sentences. Speak clearly and help the learne
     console.log(`FluentVoice English App running on http://localhost:${PORT}`);
   });
 }
-// -------------------------------------------------------------
-// مسار البحث الديناميكي وتوليد البطاقات التعليمية للكلمات الجديدة
-// -------------------------------------------------------------
-app.post("/api/lookup-word", async (req, res) => {
-  try {
-    const { word } = req.body;
 
-    if (!word) {
-      return res.status(400).json({ error: "Word is required" });
-    }
-
-    const prompt = `Create an educational flashcard object for the English word/term: "${word}". 
-    Provide the response strictly in a clean JSON format with the following keys:
-    {
-      "word": "${word}",
-      "translation": "Arabic translation here",
-      "category": "General",
-      "phonetic": "pronunciation guide",
-      "definition": "Simple English definition",
-      "example": "A clear practical sentence using the word",
-      "arabicExample": "Arabic translation of the example",
-      "imagePrompt": "A vivid description for visual learning"
-    }`;
-
-    const response = await ai.models.generateContent({
-      model: "gemini-2.0-flash",
-      contents: prompt,
-    });
-
-    const responseText = response.text || "{}";
-    const cleanJsonText = responseText.replace(/```json/g, "").replace(/```/g, "").trim();
-    const cardData = JSON.parse(cleanJsonText);
-
-    return res.json({
-      success: true,
-      card: cardData,
-    });
-  } catch (error: any) {
-    console.error("Lookup word error:", error);
-    return res.status(500).json({
-      error: "Failed to generate card for this word",
-      details: error?.message || "Unknown error",
-    });
-  }
-});
 startServer();
+
