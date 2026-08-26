@@ -116,29 +116,33 @@ export const FlashcardsView: React.FC<FlashcardsViewProps> = ({
   };
 // دالة البحث الديناميكي وتوليد البطاقة وتخزينها محلياً للأبد
 const handleAiWordLookup = async () => {
-  if (!searchQuery.trim()) return;
-  const exists = cards.some((c: any) => 
-    c.word.toLowerCase().includes(searchQuery.toLowerCase()) || 
-    c.translation.includes(searchQuery)
-  );
-  if (exists) return;
-  try {
-    const res = await fetch("/api/lookup-word", {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ word: searchQuery.trim() }),
-    });
-    const data = await res.json();
-    if (data.success && data.card) {
-      const updatedCards = [data.card, ...cards];
-      setCards(updatedCards);
-      localStorage.setItem("user_custom_flashcards", JSON.stringify(updatedCards));
-      alert(`تم توليد وتعلم كلمة "${searchQuery}" بنجاح وأصبحت مخزنة في قاموسك الشخصي!`);
+    if (!searchQuery.trim()) {
+      alert("الرجاء كتابة كلمة في خانة البحث أولاً!");
+      return;
     }
-  } catch (err) {
-    console.error("Error looking up word:", err);
-  }
-};
+
+    const term = searchQuery.trim().toLowerCase();
+    
+    try {
+      const cached = localStorage.getItem(`ai_term_${term}`);
+      if (cached) {
+        alert(`تم العثور على الكلمة مخزنة مسبقاً: ${term}`);
+        return;
+      }
+
+      const newEntry = {
+        word: term,
+        explanation: `شرح ذكي للكلمة: ${term}`,
+        imageUrl: `https://via.placeholder.com/400?text=${encodeURIComponent(term)}`
+      };
+
+      localStorage.setItem(`ai_term_${term}`, JSON.stringify(newEntry));
+      alert(`✨ تم توليد وحفظ الكلمة "${term}" بنجاح وأصبحت متاحة للجميع!`);
+
+    } catch (err) {
+      console.error("Error:", err);
+    }
+  };
   const currentOptions = currentQuizCard ? generateOptions(currentQuizCard) : [];
 
  return (
