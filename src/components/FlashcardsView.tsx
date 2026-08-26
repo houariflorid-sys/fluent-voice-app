@@ -918,4 +918,3 @@ export const FlashcardsView: React.FC<FlashcardsViewProps> = ({
       )}
     </div>
   );
-};
