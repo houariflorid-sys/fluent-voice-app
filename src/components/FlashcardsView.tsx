@@ -472,4 +472,4 @@ const handleAiWordLookup = async () => {
 </div>
   </div>
 );
-};
+}
