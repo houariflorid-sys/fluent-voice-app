@@ -117,17 +117,11 @@ export const FlashcardsView: React.FC<FlashcardsViewProps> = ({
 // دالة البحث الديناميكي وتوليد البطاقة وتخزينها محلياً للأبد
 const handleAiWordLookup = async () => {
   if (!searchQuery.trim()) return;
-  
-  // تحقق أولاً هل الكلمة موجودة في القائمة الحالية
-  const exists = cards.some(c => 
+  const exists = cards.some((c: any) => 
     c.word.toLowerCase().includes(searchQuery.toLowerCase()) || 
     c.translation.includes(searchQuery)
   );
-
-  if (exists) {
-    return; // الكلمة موجودة مسبقاً، الفلترة العادية ستظهرها
-  }
-
+  if (exists) return;
   try {
     const res = await fetch("/api/lookup-word", {
       method: "POST",
@@ -135,9 +129,7 @@ const handleAiWordLookup = async () => {
       body: JSON.stringify({ word: searchQuery.trim() }),
     });
     const data = await res.json();
-    
     if (data.success && data.card) {
-      // إضافة الكلمة الجديدة للقائمة وحفظها في LocalStorage للأبد
       const updatedCards = [data.card, ...cards];
       setCards(updatedCards);
       localStorage.setItem("user_custom_flashcards", JSON.stringify(updatedCards));
@@ -227,7 +219,6 @@ const handleAiWordLookup = async () => {
     <Search className="w-4 h-4 text-slate-400 absolute left-3 top-2.5" />
   </div>
 
-  {/* زر توليد الكلمة بالذكاء الاصطناعي */}
   <button 
     onClick={handleAiWordLookup}
     className="w-full sm:w-auto px-4 py-2 bg-blue-600 hover:bg-blue-700 text-white text-xs font-bold rounded-xl transition-all cursor-pointer whitespace-nowrap shadow-xs"
