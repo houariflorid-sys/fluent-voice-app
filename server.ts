@@ -245,7 +245,7 @@ app.post("/api/transcribe-audio", async (req, res) => {
 });
 
 // -------------------------------------------------------------
-// // -------------------------------------------------------------
+// -------------------------------------------------------------
 // 3. Create & Edit Images / Visual Flashcard Prompts
 // -------------------------------------------------------------
 app.post("/api/generate-image", async (req, res) => {
@@ -265,10 +265,9 @@ app.post("/api/generate-image", async (req, res) => {
       contents: textPrompt,
     });
 
-    // إرجاع النتيجة كأنها بيانات صورة تحتوي على الوصف أو رابط بديل لعمل البطاقة التعليمية بنجاح
     res.json({
       success: true,
-      imageUrl: null, // أو وصف بصري متقدم
+      imageUrl: null,
       description: response.text || "Educational visual generated successfully.",
     });
   } catch (error: any) {
