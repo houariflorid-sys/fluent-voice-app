@@ -245,7 +245,6 @@ app.post("/api/transcribe-audio", async (req, res) => {
 });
 
 // -------------------------------------------------------------
-// -------------------------------------------------------------
 // 3. Create & Edit Images / Visual Flashcard Prompts
 // -------------------------------------------------------------
 app.post("/api/generate-image", async (req, res) => {
@@ -265,14 +264,14 @@ app.post("/api/generate-image", async (req, res) => {
       contents: textPrompt,
     });
 
-    res.json({
+    return res.json({
       success: true,
       imageUrl: null,
       description: response.text || "Educational visual generated successfully.",
     });
   } catch (error: any) {
     console.error("Image generation error:", error);
-    res.status(500).json({
+    return res.status(500).json({
       error: "Failed to generate image",
       details: error?.message || "Unknown error",
     });
