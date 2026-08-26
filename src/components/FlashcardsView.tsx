@@ -469,7 +469,7 @@ const handleAiWordLookup = async () => {
                 >
                   العودة للبطاقات
                 </button>
-              </div>
-            </div>
- );
+</div>
+  </div>
+);
 };
