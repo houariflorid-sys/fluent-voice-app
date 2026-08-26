@@ -272,7 +272,7 @@ app.post("/api/generate-image", async (req, res) => {
   } catch (error: any) {
     console.error("Image generation error:", error);
     return res.status(500).json({
-      error: "Failed to generate image",
+      error: "Failed to download video",
       details: error?.message || "Unknown error",
     });
   }
