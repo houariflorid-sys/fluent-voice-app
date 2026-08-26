@@ -115,47 +115,35 @@ export const FlashcardsView: React.FC<FlashcardsViewProps> = ({
     return [card.word, ...distractors].sort(() => 0.5 - Math.random());
   };
 // دالة البحث الديناميكي وتوليد البطاقة وتخزينها محلياً للأبد
-const handleAiWordLookup = async () => {
-    if (!searchQuery.trim()) {
+const handleAiWordLookup = () => {
+    const query = searchQuery.trim();
+    if (!query) {
       alert("الرجاء كتابة كلمة في خانة البحث أولاً!");
       return;
     }
 
-    const term = searchQuery.trim().toLowerCase();
+    const term = query.toLowerCase();
+    console.log("AI Lookup triggered for:", term);
+
+    // إنشاء البطاقة الجديدة للكلمة
+    const newCard = {
+      id: Date.now(),
+      word: term,
+      translation: term,
+      category: "ذكاء اصطناعي",
+      imageUrl: `https://via.placeholder.com/400?text=${encodeURIComponent(term)}`,
+      ipa: `/ai-${term}/`,
+      exampleEn: `Example for ${term}.`,
+      exampleAr: `مثال للكلمة ${term}.`,
+      partOfSpeech: "noun"
+    };
+
+    // تحديث القائمة فوراً
+    const updatedCards = [newCard, ...cards];
+    setCards(updatedCards);
+    localStorage.setItem("user_custom_flashcards", JSON.stringify(updatedCards));
     
-    try {
-      // 1. التحقق إذا كانت موجودة مسبقاً في القائمة أو التخزين
-      const existingCard = cards.find((c: any) => c.word.toLowerCase() === term);
-      if (existingCard) {
-        setSearchQuery(term); // عرضها في الفلتر مباشرة
-        alert(`الكلمة "${term}" موجودة بالفعل في القاموس!`);
-        return;
-      }
-
-      // 2. إنشاء بطاقة جديدة متكاملة للصورة والشرح والنطق
-      const newCard = {
-        id: Date.now(),
-        word: term,
-        translation: term, // أو الترجمة العربية
-        category: "ذكاء اصطناعي",
-        imageUrl: `https://via.placeholder.com/400?text=${encodeURIComponent(term)}`,
-        ipa: `/ai-${term}/`,
-        exampleEn: `This is a generated example for ${term}.`,
-        exampleAr: `هذا مثال مولد للكلمة ${term}.`,
-        partOfSpeech: "noun"
-      };
-
-      // 3. إضافتها لقائمة البطاقات وحفظها محلياً
-      const updatedCards = [newCard, ...cards];
-      setCards(updatedCards);
-      localStorage.setItem("user_custom_flashcards", JSON.stringify(updatedCards));
-      
-      setSearchQuery(term);
-      alert(`✨ تم توليد وإضافة بطاقة "${term}" بنجاح مع صورتها!`);
-
-    } catch (err) {
-      console.error("Error:", err);
-    }
+    alert(`✨ تم توليد وإضافة البطاقة "${term}" بنجاح!`);
   };
   const currentOptions = currentQuizCard ? generateOptions(currentQuizCard) : [];
 
