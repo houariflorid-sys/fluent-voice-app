@@ -124,20 +124,34 @@ const handleAiWordLookup = async () => {
     const term = searchQuery.trim().toLowerCase();
     
     try {
-      const cached = localStorage.getItem(`ai_term_${term}`);
-      if (cached) {
-        alert(`تم العثور على الكلمة مخزنة مسبقاً: ${term}`);
+      // 1. التحقق إذا كانت موجودة مسبقاً في القائمة أو التخزين
+      const existingCard = cards.find((c: any) => c.word.toLowerCase() === term);
+      if (existingCard) {
+        setSearchQuery(term); // عرضها في الفلتر مباشرة
+        alert(`الكلمة "${term}" موجودة بالفعل في القاموس!`);
         return;
       }
 
-      const newEntry = {
+      // 2. إنشاء بطاقة جديدة متكاملة للصورة والشرح والنطق
+      const newCard = {
+        id: Date.now(),
         word: term,
-        explanation: `شرح ذكي للكلمة: ${term}`,
-        imageUrl: `https://via.placeholder.com/400?text=${encodeURIComponent(term)}`
+        translation: term, // أو الترجمة العربية
+        category: "ذكاء اصطناعي",
+        imageUrl: `https://via.placeholder.com/400?text=${encodeURIComponent(term)}`,
+        ipa: `/ai-${term}/`,
+        exampleEn: `This is a generated example for ${term}.`,
+        exampleAr: `هذا مثال مولد للكلمة ${term}.`,
+        partOfSpeech: "noun"
       };
 
-      localStorage.setItem(`ai_term_${term}`, JSON.stringify(newEntry));
-      alert(`✨ تم توليد وحفظ الكلمة "${term}" بنجاح وأصبحت متاحة للجميع!`);
+      // 3. إضافتها لقائمة البطاقات وحفظها محلياً
+      const updatedCards = [newCard, ...cards];
+      setCards(updatedCards);
+      localStorage.setItem("user_custom_flashcards", JSON.stringify(updatedCards));
+      
+      setSearchQuery(term);
+      alert(`✨ تم توليد وإضافة بطاقة "${term}" بنجاح مع صورتها!`);
 
     } catch (err) {
       console.error("Error:", err);
