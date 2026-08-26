@@ -292,7 +292,6 @@ export const FlashcardsView: React.FC<FlashcardsViewProps> = ({
     } finally {
       setIsSearchingAi(false);
     }
-  };
 
   // Start Quiz
   const startQuiz = () => {
