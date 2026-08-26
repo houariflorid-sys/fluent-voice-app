@@ -1,4 +1,4 @@
-import React, { useState } from "react";
+import React, { useState, useRef, useEffect } from "react";
 import confetti from "canvas-confetti";
 import {
   Volume2,
@@ -6,13 +6,17 @@ import {
   CheckCircle2,
   Sparkles,
   Gamepad2,
-  BookOpen,
   RotateCw,
   Search,
   Filter,
   Check,
   X,
   Award,
+  Loader2,
+  BookOpen,
+  PlusCircle,
+  Brain,
+  Info,
 } from "lucide-react";
 import { FlashcardItem } from "../types";
 import { playEnglishAudio, soundFX } from "../utils/audio";
@@ -21,6 +25,7 @@ interface FlashcardsViewProps {
   flashcards: FlashcardItem[];
   masteredWords: string[];
   onToggleMastered: (wordId: string) => void;
+  onAddFlashcard?: (card: FlashcardItem) => void;
   onAddXp: (amount: number) => void;
 }
 
@@ -28,14 +33,20 @@ export const FlashcardsView: React.FC<FlashcardsViewProps> = ({
   flashcards,
   masteredWords,
   onToggleMastered,
+  onAddFlashcard,
   onAddXp,
 }) => {
   const [selectedCategory, setSelectedCategory] = useState<string>("all");
   const [searchQuery, setSearchQuery] = useState<string>("");
-  const [activeCardId, setActiveCardId] = useState<string | null>(null);
-  const [quizMode, setQuizMode] = useState<boolean>(false);
+  const [isSearchingAi, setIsSearchingAi] = useState<boolean>(false);
+  const [statusMessage, setStatusMessage] = useState<{ type: "success" | "error" | "info"; text: string } | null>(null);
+  const [isDropdownOpen, setIsDropdownOpen] = useState<boolean>(false);
+  const [highlightedCardId, setHighlightedCardId] = useState<string | null>(null);
 
-  // Quiz state
+  const searchContainerRef = useRef<HTMLDivElement>(null);
+
+  // Quiz Mode state
+  const [quizMode, setQuizMode] = useState<boolean>(false);
   const [quizIndex, setQuizIndex] = useState<number>(0);
   const [quizScore, setQuizScore] = useState<number>(0);
   const [selectedOption, setSelectedOption] = useState<string | null>(null);
@@ -43,14 +54,55 @@ export const FlashcardsView: React.FC<FlashcardsViewProps> = ({
   const [isCorrect, setIsCorrect] = useState<boolean>(false);
   const [quizCompleted, setQuizCompleted] = useState<boolean>(false);
 
+  // Close dropdown when clicking outside
+  useEffect(() => {
+    const handleClickOutside = (event: MouseEvent) => {
+      if (searchContainerRef.current && !searchContainerRef.current.contains(event.target as Node)) {
+        setIsDropdownOpen(false);
+      }
+    };
+    document.addEventListener("mousedown", handleClickOutside);
+    return () => document.removeEventListener("mousedown", handleClickOutside);
+  }, []);
+
   // Filtered Cards
   const filteredCards = flashcards.filter((card) => {
-    const matchesCategory = selectedCategory === "all" || card.category === selectedCategory;
-    const matchesSearch =
-      card.word.toLowerCase().includes(searchQuery.toLowerCase()) ||
-      card.arabicMeaning.includes(searchQuery);
-    return matchesCategory && matchesSearch;
+    if (selectedCategory === "mastered") {
+      if (!masteredWords.includes(card.id)) return false;
+    } else if (selectedCategory === "ai_generated") {
+      if (!card.isAiGenerated && !card.id.startsWith("fc-ai")) return false;
+    } else if (selectedCategory !== "all") {
+      if (card.category !== selectedCategory) return false;
+    }
+
+    if (!searchQuery.trim()) return true;
+
+    const query = searchQuery.toLowerCase().trim();
+    return (
+      card.word.toLowerCase().includes(query) ||
+      card.arabicMeaning.includes(query) ||
+      card.arabicPhonetics.includes(query) ||
+      card.exampleEn.toLowerCase().includes(query) ||
+      card.exampleAr.includes(query)
+    );
   });
+
+  // Autocomplete Suggestions while typing
+  const cleanSearch = searchQuery.trim().toLowerCase();
+  const suggestions = cleanSearch
+    ? flashcards.filter(
+        (c) =>
+          c.word.toLowerCase().includes(cleanSearch) ||
+          c.arabicMeaning.includes(cleanSearch) ||
+          c.arabicPhonetics.includes(cleanSearch)
+      ).slice(0, 6)
+    : [];
+
+  const exactMatchCard = flashcards.find(
+    (c) =>
+      c.word.toLowerCase() === cleanSearch ||
+      c.arabicMeaning.trim() === searchQuery.trim()
+  );
 
   const handlePlayWord = (word: string, rate: number = 1.0) => {
     soundFX.playClick();
@@ -60,6 +112,104 @@ export const FlashcardsView: React.FC<FlashcardsViewProps> = ({
   const handlePlaySentence = (sentence: string) => {
     soundFX.playClick();
     playEnglishAudio(sentence, { rate: 0.9 });
+  };
+
+  // Scroll to and highlight a specific card
+  const scrollToCard = (cardId: string) => {
+    setHighlightedCardId(cardId);
+    setIsDropdownOpen(false);
+
+    setTimeout(() => {
+      const el = document.getElementById(`flashcard-${cardId}`);
+      if (el) {
+        el.scrollIntoView({ behavior: "smooth", block: "center" });
+      }
+    }, 100);
+
+    setTimeout(() => {
+      setHighlightedCardId(null);
+    }, 3500);
+  };
+
+  // AI Lookup & Generation handler
+  const handleAiLookup = async (wordToSearch?: string) => {
+    const term = (wordToSearch || searchQuery).trim();
+    if (!term) {
+      setStatusMessage({
+        type: "error",
+        text: "الرجاء كتابة كلمة في خانة البحث أولاً (مثل: Hospitality أو مستشفى أو Resilience)",
+      });
+      return;
+    }
+
+    setIsDropdownOpen(false);
+
+    // 1. Check if the card already exists in the library
+    const existing = flashcards.find(
+      (c) =>
+        c.word.toLowerCase() === term.toLowerCase() ||
+        c.arabicMeaning.toLowerCase() === term.toLowerCase()
+    );
+
+    if (existing) {
+      soundFX.playSuccess();
+      setSelectedCategory("all");
+      setSearchQuery(existing.word);
+      scrollToCard(existing.id);
+      setStatusMessage({
+        type: "info",
+        text: `✨ الكلمة "${existing.word}" (${existing.arabicMeaning}) موجودة بالفعل في البطاقات! تم تحديدها لك.`,
+      });
+      return;
+    }
+
+    // 2. Generate via Gemini backend API
+    setIsSearchingAi(true);
+    setStatusMessage({
+      type: "info",
+      text: `جارِ البحث والتحليل وتوليد بطاقة مصورة تفاعلية لكلمة "${term}" بالذكاء الاصطناعي...`,
+    });
+
+    try {
+      const response = await fetch("/api/generate-flashcard", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ query: term }),
+      });
+
+      if (!response.ok) {
+        const errJson = await response.json().catch(() => ({}));
+        throw new Error(errJson.details || errJson.error || "حدث خطأ أثناء الاتصال بالخادم وتوليد البطاقة");
+      }
+
+      const generatedCard: FlashcardItem = await response.json();
+
+      if (onAddFlashcard) {
+        onAddFlashcard(generatedCard);
+      }
+
+      onAddXp(25);
+      soundFX.playSuccess();
+      confetti({ particleCount: 70, spread: 60, origin: { y: 0.6 } });
+
+      setSelectedCategory("all");
+      setSearchQuery(generatedCard.word);
+      scrollToCard(generatedCard.id);
+
+      setStatusMessage({
+        type: "success",
+        text: `🎉 تم بنجاح توليد وحفظ بطاقة "${generatedCard.word}" (${generatedCard.arabicMeaning}) وستكون متاحة للجميع دائماً! (+25 XP)`,
+      });
+    } catch (err: any) {
+      console.error("AI flashcard generation error:", err);
+      soundFX.playEncouragement();
+      setStatusMessage({
+        type: "error",
+        text: err?.message || "تعذر توليد البطاقة حالياً، يرجى المحاولة مرة أخرى.",
+      });
+    } finally {
+      setIsSearchingAi(false);
+    }
   };
 
   // Start Quiz
@@ -105,7 +255,7 @@ export const FlashcardsView: React.FC<FlashcardsViewProps> = ({
   };
 
   // Quiz Options generator
-  const currentQuizCard = flashcards[quizIndex];
+  const currentQuizCard = flashcards[quizIndex] || flashcards[0];
   const generateOptions = (card: FlashcardItem) => {
     const distractors = flashcards
       .filter((c) => c.id !== card.id)
@@ -114,62 +264,34 @@ export const FlashcardsView: React.FC<FlashcardsViewProps> = ({
       .slice(0, 3);
     return [card.word, ...distractors].sort(() => 0.5 - Math.random());
   };
-// دالة البحث الديناميكي وتوليد البطاقة وتخزينها محلياً للأبد
-const handleAiWordLookup = () => {
-    const query = searchQuery.trim();
-    if (!query) {
-      alert("الرجاء كتابة كلمة في خانة البحث أولاً!");
-      return;
-    }
 
-    const term = query.toLowerCase();
-    console.log("AI Lookup triggered for:", term);
-
-    // إنشاء البطاقة الجديدة للكلمة
-    const newCard = {
-      id: Date.now(),
-      word: term,
-      translation: term,
-      category: "ذكاء اصطناعي",
-      imageUrl: `https://via.placeholder.com/400?text=${encodeURIComponent(term)}`,
-      ipa: `/ai-${term}/`,
-      exampleEn: `Example for ${term}.`,
-      exampleAr: `مثال للكلمة ${term}.`,
-      partOfSpeech: "noun"
-    };
-
-    // تحديث القائمة فوراً
-    const updatedCards = [newCard, ...cards];
-    setCards(updatedCards);
-    localStorage.setItem("user_custom_flashcards", JSON.stringify(updatedCards));
-    
-    alert(`✨ تم توليد وإضافة البطاقة "${term}" بنجاح!`);
-  };
   const currentOptions = currentQuizCard ? generateOptions(currentQuizCard) : [];
 
- return (
+  return (
     <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-6 space-y-8">
       {/* Header Banner & Mode Switch */}
       <div className="flex flex-col md:flex-row md:items-center justify-between gap-4 bg-gradient-to-r from-blue-600 via-indigo-600 to-purple-600 rounded-3xl p-6 sm:p-8 text-white shadow-lg shadow-blue-500/10">
         <div className="space-y-2 max-w-xl">
           <div className="flex items-center gap-2">
-            <span className="px-3 py-1 rounded-xl bg-white/20 backdrop-blur-md text-xs font-bold">
-              قاموس المفردات المصور
+            <span className="px-3 py-1 rounded-xl bg-white/20 backdrop-blur-md text-xs font-bold flex items-center gap-1.5">
+              <BookOpen className="w-3.5 h-3.5" />
+              <span>قاموس المفردات المصور والذكي</span>
             </span>
             <span className="text-xs font-medium text-blue-100">
               {masteredWords.length} من {flashcards.length} كلمة متقنة
             </span>
           </div>
           <h2 className="text-2xl sm:text-3xl font-black tracking-tight">
-            تعلم الكلمات الإنجليزية بالصوت والصورة
+            تعلم الكلمات الإنجليزية بالصوت والصورة والذكاء الاصطناعي
           </h2>
           <p className="text-xs sm:text-sm text-blue-100/90 leading-relaxed font-medium">
-            اربط الكلمة بصورتها ونطقها النموذجي لترسيخها في الذاكرة طويلة المدى، مع أمثلة عملية ونطق مبسط.
+            ابحث عن أي كلمة أو اطلب من الذكاء الاصطناعي توليد بطاقتها المصورة فوراً بنطقها وأمثلتها ليتم حفظها ومشاركتها مع جميع المتعلمين!
           </p>
         </div>
 
         <div className="flex items-center gap-3">
           <button
+            id="flashcards-quiz-toggle-btn"
             onClick={() => setQuizMode(!quizMode)}
             className={`flex items-center gap-2 px-5 py-3 rounded-2xl text-xs sm:text-sm font-bold shadow-md transition-all cursor-pointer ${
               quizMode
@@ -183,14 +305,46 @@ const handleAiWordLookup = () => {
         </div>
       </div>
 
+      {/* Status Feedback Banner */}
+      {statusMessage && (
+        <div
+          className={`p-4 rounded-2xl text-xs font-bold flex items-center justify-between gap-3 border transition-all animate-fade-in ${
+            statusMessage.type === "success"
+              ? "bg-emerald-50 dark:bg-emerald-950/40 border-emerald-200 dark:border-emerald-800 text-emerald-800 dark:text-emerald-200"
+              : statusMessage.type === "error"
+              ? "bg-rose-50 dark:bg-rose-950/40 border-rose-200 dark:border-rose-800 text-rose-800 dark:text-rose-200"
+              : "bg-blue-50 dark:bg-blue-950/40 border-blue-200 dark:border-blue-800 text-blue-800 dark:text-blue-200"
+          }`}
+        >
+          <div className="flex items-center gap-2.5">
+            {statusMessage.type === "success" ? (
+              <CheckCircle2 className="w-5 h-5 text-emerald-600 shrink-0" />
+            ) : statusMessage.type === "error" ? (
+              <X className="w-5 h-5 text-rose-600 shrink-0" />
+            ) : (
+              <Sparkles className="w-5 h-5 text-blue-600 shrink-0 animate-spin" />
+            )}
+            <span>{statusMessage.text}</span>
+          </div>
+          <button
+            onClick={() => setStatusMessage(null)}
+            className="p-1 text-slate-400 hover:text-slate-600 dark:hover:text-slate-200"
+          >
+            <X className="w-4 h-4" />
+          </button>
+        </div>
+      )}
+
       {!quizMode ? (
         <div className="space-y-6">
-          {/* Filters & Search */}
-          <div className="flex flex-col sm:flex-row items-center justify-between gap-4">
+          {/* Filters & Interactive Search Bar with Live Suggestions */}
+          <div className="flex flex-col lg:flex-row items-stretch lg:items-center justify-between gap-4">
             {/* Category tabs */}
-            <div className="flex items-center gap-2 overflow-x-auto pb-1 max-w-full no-scrollbar w-full sm:w-auto">
+            <div className="flex items-center gap-2 overflow-x-auto pb-1 max-w-full no-scrollbar">
               {[
                 { id: "all", label: "جميع الكلمات" },
+                { id: "ai_generated", label: "✨ مولدة بالذكاء الاصطناعي" },
+                { id: "mastered", label: "✓ المتقنة" },
                 { id: "food", label: "طعام ومشروبات" },
                 { id: "travel", label: "سفر وسياحة" },
                 { id: "work", label: "عمل واجتماعات" },
@@ -200,7 +354,10 @@ const handleAiWordLookup = () => {
               ].map((c) => (
                 <button
                   key={c.id}
-                  onClick={() => setSelectedCategory(c.id)}
+                  onClick={() => {
+                    setSelectedCategory(c.id);
+                    soundFX.playClick();
+                  }}
                   className={`px-3.5 py-2 rounded-xl text-xs font-bold whitespace-nowrap transition-all cursor-pointer ${
                     selectedCategory === c.id
                       ? "bg-slate-900 dark:bg-blue-600 text-white shadow-xs"
@@ -212,140 +369,322 @@ const handleAiWordLookup = () => {
               ))}
             </div>
 
-            {/* Search Input & AI Lookup Button */}
-            <div className="flex flex-col sm:flex-row items-center gap-2 w-full sm:w-auto">
-              <div className="relative w-full sm:w-64">
+            {/* Live Autocomplete Search Input + AI Action */}
+            <div ref={searchContainerRef} className="relative flex flex-col sm:flex-row items-center gap-2">
+              <div className="relative w-full sm:w-80">
                 <input
+                  id="flashcards-search-input"
                   type="text"
                   value={searchQuery}
-                  onChange={(e) => setSearchQuery(e.target.value)}
-                  placeholder="ابحث بالعربية أو الإنجليزية..."
-                  className="w-full pl-3 pr-9 py-2 rounded-xl text-xs font-bold bg-white dark:bg-slate-800 text-slate-800 dark:text-slate-100 border border-slate-200 dark:border-slate-700 focus:outline-none focus:ring-2 focus:ring-blue-500"
+                  onFocus={() => {
+                    if (searchQuery.trim().length > 0) setIsDropdownOpen(true);
+                  }}
+                  onChange={(e) => {
+                    setSearchQuery(e.target.value);
+                    setIsDropdownOpen(true);
+                  }}
+                  onKeyDown={(e) => {
+                    if (e.key === "Enter") {
+                      if (exactMatchCard) {
+                        scrollToCard(exactMatchCard.id);
+                      } else {
+                        handleAiLookup();
+                      }
+                    }
+                  }}
+                  placeholder="ابحث بالحرف أو الكلمة (عربي/إنجليزي)..."
+                  className="w-full pl-9 pr-9 py-2.5 rounded-xl bg-white dark:bg-slate-800 border border-slate-200 dark:border-slate-700 text-xs font-bold text-slate-900 dark:text-white placeholder-slate-400 dark:placeholder-slate-500 focus:outline-none focus:ring-2 focus:ring-blue-500 shadow-xs"
                 />
-                <Search className="w-4 h-4 text-slate-400 absolute left-3 top-2.5" />
+                <Search className="w-4 h-4 text-slate-400 absolute right-3 top-3 pointer-events-none" />
+                {searchQuery && (
+                  <button
+                    onClick={() => {
+                      setSearchQuery("");
+                      setIsDropdownOpen(false);
+                    }}
+                    className="absolute left-3 top-3 text-slate-400 hover:text-slate-600 dark:hover:text-slate-200 cursor-pointer"
+                  >
+                    <X className="w-4 h-4" />
+                  </button>
+                )}
+
+                {/* 🔍 Dynamic Live Autocomplete Suggestions Dropdown */}
+                {isDropdownOpen && searchQuery.trim().length > 0 && (
+                  <div className="absolute top-full right-0 left-0 mt-1.5 bg-white dark:bg-slate-900 rounded-2xl border border-slate-200 dark:border-slate-800 shadow-2xl z-50 overflow-hidden divide-y divide-slate-100 dark:divide-slate-800 animate-fade-in max-h-80 overflow-y-auto">
+                    {/* Instant AI Generation Option if word is being typed */}
+                    <div
+                      onClick={() => handleAiLookup(searchQuery)}
+                      className="p-3 bg-gradient-to-r from-blue-50 to-indigo-50 dark:from-blue-950/50 dark:to-indigo-950/50 hover:from-blue-100 hover:to-indigo-100 dark:hover:from-blue-900/50 dark:hover:to-indigo-900/50 cursor-pointer transition-all flex items-center justify-between gap-2 text-blue-700 dark:text-blue-300"
+                    >
+                      <div className="flex items-center gap-2">
+                        <Sparkles className="w-4 h-4 text-amber-500 shrink-0" />
+                        <div>
+                          <p className="text-xs font-black">
+                            توليد بطاقة مصورة لـ: <span className="underline font-mono dir-ltr">"{searchQuery.trim()}"</span>
+                          </p>
+                          <p className="text-[10px] text-blue-600/80 dark:text-blue-300/80">
+                            سيقوم Gemini بصياغة المعنى، النطق، جملة واقعية، وحفظها
+                          </p>
+                        </div>
+                      </div>
+                      <span className="text-[10px] bg-blue-600 text-white font-bold px-2 py-0.5 rounded-lg shrink-0">
+                        توليد الآن
+                      </span>
+                    </div>
+
+                    {/* Matching Cards Suggestions */}
+                    {suggestions.length > 0 ? (
+                      <div>
+                        <div className="px-3 py-1.5 bg-slate-50 dark:bg-slate-800/60 text-[10px] font-bold text-slate-500 dark:text-slate-400">
+                          نتائج مطابقة من البطاقات ({suggestions.length})
+                        </div>
+                        {suggestions.map((card) => (
+                          <div
+                            key={card.id}
+                            onClick={() => {
+                              setSearchQuery(card.word);
+                              scrollToCard(card.id);
+                            }}
+                            className="p-3 hover:bg-slate-50 dark:hover:bg-slate-800 cursor-pointer transition-all flex items-center justify-between gap-3 group"
+                          >
+                            <div className="flex items-center gap-2.5">
+                              <img
+                                src={card.imageUrl}
+                                alt={card.word}
+                                className="w-9 h-9 rounded-xl object-cover border border-slate-200 dark:border-slate-700 shrink-0"
+                                referrerPolicy="no-referrer"
+                              />
+                              <div>
+                                <div className="flex items-baseline gap-1.5">
+                                  <p className="text-xs font-black text-slate-900 dark:text-white dir-ltr group-hover:text-blue-600 dark:group-hover:text-blue-400">
+                                    {card.word}
+                                  </p>
+                                  <span className="text-[10px] text-slate-400 italic">
+                                    ({card.partOfSpeech})
+                                  </span>
+                                </div>
+                                <p className="text-[11px] text-slate-600 dark:text-slate-300 font-medium">
+                                  {card.arabicMeaning} • <span className="text-indigo-600 dark:text-indigo-400 font-bold">{card.arabicPhonetics}</span>
+                                </p>
+                              </div>
+                            </div>
+
+                            <button
+                              onClick={(e) => {
+                                e.stopPropagation();
+                                handlePlayWord(card.word);
+                              }}
+                              className="p-1.5 rounded-lg bg-slate-100 dark:bg-slate-800 hover:bg-blue-100 text-slate-600 dark:text-slate-300 hover:text-blue-600 shrink-0"
+                              title="استمع للنطق"
+                            >
+                              <Volume2 className="w-3.5 h-3.5" />
+                            </button>
+                          </div>
+                        ))}
+                      </div>
+                    ) : (
+                      <div className="p-3 text-center text-slate-500 dark:text-slate-400 text-xs font-medium">
+                        لم يتم العثور على كلمة مطابقة سابقة. اضغط على خيار التوليد بالذكاء الاصطناعي بالأعلى!
+                      </div>
+                    )}
+                  </div>
+                )}
               </div>
 
-              <button 
-                onClick={handleAiWordLookup}
-                className="w-full sm:w-auto px-4 py-2 bg-blue-600 hover:bg-blue-700 text-white text-xs font-bold rounded-xl transition-all cursor-pointer whitespace-nowrap shadow-xs"
+              {/* Main AI Search / Generate Button */}
+              <button
+                id="flashcard-ai-generate-btn"
+                disabled={isSearchingAi}
+                onClick={() => handleAiLookup()}
+                className={`w-full sm:w-auto px-4 py-2.5 bg-gradient-to-r from-blue-600 to-indigo-600 hover:from-blue-700 hover:to-indigo-700 text-white text-xs font-black rounded-xl transition-all cursor-pointer whitespace-nowrap shadow-md shadow-blue-500/20 flex items-center justify-center gap-1.5 ${
+                  isSearchingAi ? "opacity-75 cursor-wait" : ""
+                }`}
               >
-                ✨ ابحث وتعلّم بالذكاء الاصطناعي
+                {isSearchingAi ? (
+                  <>
+                    <Loader2 className="w-4 h-4 animate-spin text-white" />
+                    <span>جارِ التوليد...</span>
+                  </>
+                ) : (
+                  <>
+                    <Sparkles className="w-4 h-4 text-amber-300 fill-amber-300" />
+                    <span>✨ ابحث وتعلّم بالذكاء الاصطناعي</span>
+                  </>
+                )}
               </button>
             </div>
           </div>
 
+          {/* Cards Count and Active Filters Notice */}
+          <div className="flex items-center justify-between text-xs text-slate-500 dark:text-slate-400 font-bold px-1">
+            <span>
+              عرض {filteredCards.length} من أصل {flashcards.length} بطاقة
+            </span>
+            {searchQuery && (
+              <button
+                onClick={() => setSearchQuery("")}
+                className="text-blue-600 dark:text-blue-400 hover:underline flex items-center gap-1"
+              >
+                <span>إلغاء البحث ({searchQuery})</span>
+                <X className="w-3.5 h-3.5" />
+              </button>
+            )}
+          </div>
+
           {/* Cards Grid */}
-          <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-6">
-            {filteredCards.map((card) => {
-              const isMastered = masteredWords.includes(card.id);
+          {filteredCards.length > 0 ? (
+            <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-6">
+              {filteredCards.map((card) => {
+                const isMastered = masteredWords.includes(card.id);
+                const isHighlighted = highlightedCardId === card.id;
 
-              return (
-                <div
-                  key={card.id}
-                  id={`flashcard-${card.id}`}
-                  className="bg-white dark:bg-slate-900 rounded-3xl border border-slate-200/90 dark:border-slate-800 shadow-xs hover:shadow-md transition-all overflow-hidden flex flex-col group"
-                >
-                  {/* Visual Photo with Overlay */}
-                  <div className="relative h-44 w-full overflow-hidden bg-slate-100 dark:bg-slate-800">
-                    <img
-                      src={card.imageUrl}
-                      alt={card.word}
-                      className="w-full h-full object-cover group-hover:scale-105 transition-transform duration-500"
-                      referrerPolicy="no-referrer"
-                    />
-                    <div className="absolute inset-0 bg-gradient-to-t from-black/60 via-transparent to-transparent" />
+                return (
+                  <div
+                    key={card.id}
+                    id={`flashcard-${card.id}`}
+                    className={`bg-white dark:bg-slate-900 rounded-3xl border shadow-xs hover:shadow-md transition-all overflow-hidden flex flex-col group relative ${
+                      isHighlighted
+                        ? "ring-4 ring-amber-400 dark:ring-amber-500 border-amber-400 scale-[1.02] shadow-xl"
+                        : "border-slate-200/90 dark:border-slate-800"
+                    }`}
+                  >
+                    {/* Visual Photo with Overlay */}
+                    <div className="relative h-44 w-full overflow-hidden bg-slate-100 dark:bg-slate-800">
+                      <img
+                        src={card.imageUrl}
+                        alt={card.word}
+                        className="w-full h-full object-cover group-hover:scale-105 transition-transform duration-500"
+                        referrerPolicy="no-referrer"
+                      />
+                      <div className="absolute inset-0 bg-gradient-to-t from-black/70 via-black/20 to-transparent" />
 
-                    {/* Category Tag & Mastered Badge */}
-                    <div className="absolute top-3 right-3 left-3 flex items-center justify-between">
-                      <span className="text-[10px] font-bold uppercase tracking-wider px-2 py-1 rounded-lg bg-black/50 text-white backdrop-blur-md">
-                        {card.category}
-                      </span>
+                      {/* Category Tag & Mastered Badge */}
+                      <div className="absolute top-3 right-3 left-3 flex items-center justify-between gap-2">
+                        <div className="flex items-center gap-1.5">
+                          <span className="text-[10px] font-bold uppercase tracking-wider px-2.5 py-1 rounded-lg bg-black/60 text-white backdrop-blur-md">
+                            {card.category}
+                          </span>
+                          {(card.isAiGenerated || card.id.startsWith("fc-ai")) && (
+                            <span className="text-[9px] font-black px-2 py-0.5 rounded-lg bg-indigo-600/90 text-white backdrop-blur-md flex items-center gap-1">
+                              <Sparkles className="w-2.5 h-2.5 text-amber-300" />
+                              <span>AI</span>
+                            </span>
+                          )}
+                        </div>
 
-                      <button
-                        onClick={() => {
-                          onToggleMastered(card.id);
-                          if (!isMastered) {
-                            soundFX.playSuccess();
-                            onAddXp(15);
-                          }
-                        }}
-                        className={`p-1.5 rounded-full backdrop-blur-md transition-all cursor-pointer ${
-                          isMastered
-                            ? "bg-emerald-500 text-white shadow-xs"
-                            : "bg-white/80 dark:bg-slate-800/80 text-slate-600 dark:text-slate-300 hover:bg-white dark:hover:bg-slate-700"
-                        }`}
-                        title={isMastered ? "تم حفظ الكلمة" : "تحديد كمتقنة"}
-                      >
-                        <CheckCircle2 className="w-4 h-4" />
-                      </button>
-                    </div>
-
-                    {/* Word Title & Part of Speech */}
-                    <div className="absolute bottom-3 right-3 left-3 text-white">
-                      <div className="flex items-baseline justify-between">
-                        <h3 className="text-xl font-black tracking-wide dir-ltr">{card.word}</h3>
-                        <span className="text-[11px] text-slate-300 font-medium italic">
-                          ({card.partOfSpeech})
-                        </span>
+                        <button
+                          onClick={() => {
+                            onToggleMastered(card.id);
+                            if (!isMastered) {
+                              soundFX.playSuccess();
+                              onAddXp(15);
+                            }
+                          }}
+                          className={`p-1.5 rounded-full backdrop-blur-md transition-all cursor-pointer ${
+                            isMastered
+                              ? "bg-emerald-500 text-white shadow-xs"
+                              : "bg-white/80 dark:bg-slate-800/80 text-slate-600 dark:text-slate-300 hover:bg-white dark:hover:bg-slate-700"
+                          }`}
+                          title={isMastered ? "تم حفظ الكلمة" : "تحديد كمتقنة"}
+                        >
+                          <CheckCircle2 className="w-4 h-4" />
+                        </button>
                       </div>
-                    </div>
-                  </div>
 
-                  {/* Details, Phonetics, and Audio Buttons */}
-                  <div className="p-5 space-y-4 flex-1 flex flex-col justify-between">
-                    <div className="space-y-2.5">
-                      {/* Phonetics & Meaning */}
-                      <div className="space-y-1">
-                        <div className="flex items-center gap-1.5 text-xs text-indigo-700 dark:text-indigo-300 font-bold bg-indigo-50/80 dark:bg-indigo-950/40 px-2.5 py-1 rounded-lg">
-                          <span>النطق:</span>
-                          <span className="font-semibold">{card.arabicPhonetics}</span>
-                          <span className="text-[10px] text-slate-500 dark:text-slate-400 font-mono dir-ltr mr-auto">
-                            {card.ipa}
+                      {/* Word Title & Part of Speech */}
+                      <div className="absolute bottom-3 right-3 left-3 text-white">
+                        <div className="flex items-baseline justify-between">
+                          <h3 className="text-xl font-black tracking-wide dir-ltr">{card.word}</h3>
+                          <span className="text-[11px] text-slate-300 font-medium italic">
+                            ({card.partOfSpeech})
                           </span>
                         </div>
-
-                        <p className="text-sm font-bold text-slate-900 dark:text-white pt-1">{card.arabicMeaning}</p>
-                      </div>
-
-                      {/* Example Sentence */}
-                      <div
-                        onClick={() => handlePlaySentence(card.exampleEn)}
-                        className="p-2.5 rounded-xl bg-slate-50 dark:bg-slate-800/60 border border-slate-100 dark:border-slate-800 hover:border-blue-200 dark:hover:border-blue-800 cursor-pointer transition-all group/sentence space-y-1"
-                      >
-                        <div className="flex items-center justify-between gap-1">
-                          <p className="text-xs font-semibold text-slate-800 dark:text-slate-200 dir-ltr group-hover/sentence:text-blue-600 dark:group-hover/sentence:text-blue-400">
-                            "{card.exampleEn}"
-                          </p>
-                          <Volume2 className="w-3.5 h-3.5 text-slate-400 group-hover/sentence:text-blue-600 dark:group-hover/sentence:text-blue-400 shrink-0" />
-                        </div>
-                        <p className="text-[11px] text-slate-500 dark:text-slate-400 font-medium">{card.exampleAr}</p>
                       </div>
                     </div>
 
-                    {/* Audio Playback Controls (Normal & Slow) */}
-                    <div className="grid grid-cols-2 gap-2 pt-2 border-t border-slate-100 dark:border-slate-800">
-                      <button
-                        onClick={() => handlePlayWord(card.word, 1.0)}
-                        className="flex items-center justify-center gap-1.5 py-2 px-3 rounded-xl bg-blue-50 dark:bg-blue-950/50 hover:bg-blue-100 dark:hover:bg-blue-900/50 text-blue-700 dark:text-blue-300 text-xs font-bold transition-all cursor-pointer"
-                      >
-                        <Volume2 className="w-4 h-4" />
-                        <span>نطق عادي</span>
-                      </button>
+                    {/* Details, Phonetics, and Audio Buttons */}
+                    <div className="p-5 space-y-4 flex-1 flex flex-col justify-between">
+                      <div className="space-y-2.5">
+                        {/* Phonetics & Meaning */}
+                        <div className="space-y-1.5">
+                          <div className="flex items-center gap-1.5 text-xs text-indigo-700 dark:text-indigo-300 font-bold bg-indigo-50/80 dark:bg-indigo-950/40 px-2.5 py-1.5 rounded-xl">
+                            <span>النطق:</span>
+                            <span className="font-black text-slate-900 dark:text-white">
+                              {card.arabicPhonetics}
+                            </span>
+                            <span className="text-[10px] text-slate-500 dark:text-slate-400 font-mono dir-ltr mr-auto">
+                              {card.ipa}
+                            </span>
+                          </div>
 
-                      <button
-                        onClick={() => handlePlayWord(card.word, 0.75)}
-                        className="flex items-center justify-center gap-1.5 py-2 px-3 rounded-xl bg-slate-100 dark:bg-slate-800 hover:bg-slate-200 dark:hover:bg-slate-700 text-slate-700 dark:text-slate-300 text-xs font-bold transition-all cursor-pointer"
-                        title="نطق بطيء للمبتدئين"
-                      >
-                        <Volume1 className="w-4 h-4" />
-                        <span>نطق بطيء</span>
-                      </button>
+                          <p className="text-sm font-black text-slate-900 dark:text-white pt-1">
+                            {card.arabicMeaning}
+                          </p>
+                        </div>
+
+                        {/* Example Sentence */}
+                        <div
+                          onClick={() => handlePlaySentence(card.exampleEn)}
+                          className="p-3 rounded-xl bg-slate-50 dark:bg-slate-800/60 border border-slate-100 dark:border-slate-800 hover:border-blue-200 dark:hover:border-blue-800 cursor-pointer transition-all group/sentence space-y-1"
+                        >
+                          <div className="flex items-center justify-between gap-1">
+                            <p className="text-xs font-bold text-slate-800 dark:text-slate-200 dir-ltr group-hover/sentence:text-blue-600 dark:group-hover/sentence:text-blue-400">
+                              "{card.exampleEn}"
+                            </p>
+                            <Volume2 className="w-3.5 h-3.5 text-slate-400 group-hover/sentence:text-blue-600 dark:group-hover/sentence:text-blue-400 shrink-0" />
+                          </div>
+                          <p className="text-[11px] text-slate-500 dark:text-slate-400 font-medium">
+                            {card.exampleAr}
+                          </p>
+                        </div>
+                      </div>
+
+                      {/* Audio Playback Controls (Normal & Slow) */}
+                      <div className="grid grid-cols-2 gap-2 pt-2 border-t border-slate-100 dark:border-slate-800">
+                        <button
+                          onClick={() => handlePlayWord(card.word, 1.0)}
+                          className="flex items-center justify-center gap-1.5 py-2 px-3 rounded-xl bg-blue-50 dark:bg-blue-950/50 hover:bg-blue-100 dark:hover:bg-blue-900/50 text-blue-700 dark:text-blue-300 text-xs font-bold transition-all cursor-pointer"
+                        >
+                          <Volume2 className="w-4 h-4" />
+                          <span>نطق عادي</span>
+                        </button>
+
+                        <button
+                          onClick={() => handlePlayWord(card.word, 0.75)}
+                          className="flex items-center justify-center gap-1.5 py-2 px-3 rounded-xl bg-slate-100 dark:bg-slate-800 hover:bg-slate-200 dark:hover:bg-slate-700 text-slate-700 dark:text-slate-300 text-xs font-bold transition-all cursor-pointer"
+                          title="نطق بطيء للمبتدئين"
+                        >
+                          <Volume1 className="w-4 h-4" />
+                          <span>نطق بطيء</span>
+                        </button>
+                      </div>
                     </div>
                   </div>
-                </div>
-              );
-            })}
-          </div>
+                );
+              })}
+            </div>
+          ) : (
+            <div className="text-center py-12 bg-white dark:bg-slate-900 rounded-3xl border border-slate-200 dark:border-slate-800 p-8 space-y-4">
+              <div className="w-16 h-16 rounded-2xl bg-blue-50 dark:bg-blue-950 text-blue-600 dark:text-blue-400 mx-auto flex items-center justify-center">
+                <Sparkles className="w-8 h-8" />
+              </div>
+              <div className="space-y-1">
+                <h3 className="text-lg font-black text-slate-900 dark:text-white">
+                  لم يتم العثور على بطاقات تطابق "{searchQuery}"
+                </h3>
+                <p className="text-xs text-slate-500 dark:text-slate-400 max-w-md mx-auto">
+                  يمكنك توليد بطاقة تعليمية فورية لهذه الكلمة بالذكاء الاصطناعي مع حفظها تلقائياً!
+                </p>
+              </div>
+              <button
+                disabled={isSearchingAi}
+                onClick={() => handleAiLookup(searchQuery)}
+                className="px-5 py-2.5 rounded-xl bg-blue-600 hover:bg-blue-700 text-white text-xs font-black shadow-md cursor-pointer transition-all"
+              >
+                ✨ اضغط لتوليد بطاقة "{searchQuery}" الآن
+              </button>
+            </div>
+          )}
         </div>
       ) : (
         /* Visual Interactive Quiz Mode */
@@ -393,7 +732,8 @@ const handleAiWordLookup = () => {
                   const isSelected = selectedOption === opt;
                   const isAnswer = opt.toLowerCase() === currentQuizCard.word.toLowerCase();
 
-                  let btnStyle = "bg-slate-50 dark:bg-slate-800 border-slate-200 dark:border-slate-700 text-slate-800 dark:text-slate-200 hover:bg-slate-100 dark:hover:bg-slate-700";
+                  let btnStyle =
+                    "bg-slate-50 dark:bg-slate-800 border-slate-200 dark:border-slate-700 text-slate-800 dark:text-slate-200 hover:bg-slate-100 dark:hover:bg-slate-700";
                   if (isAnswerChecked) {
                     if (isAnswer) {
                       btnStyle = "bg-emerald-500 border-emerald-600 text-white shadow-md";
@@ -474,7 +814,7 @@ const handleAiWordLookup = () => {
                   onClick={() => setQuizMode(false)}
                   className="px-5 py-2.5 rounded-xl bg-slate-100 dark:bg-slate-800 text-slate-700 dark:text-slate-300 font-bold text-xs hover:bg-slate-200 dark:hover:bg-slate-700 cursor-pointer"
                 >
-                   العودة للبطاقات
+                  العودة للبطاقات
                 </button>
               </div>
             </div>
