@@ -150,75 +150,29 @@ export const FlashcardsView: React.FC<FlashcardsViewProps> = ({
     if (!term) {
       setStatusMessage({
         type: "error",
-        text: "الرجاء كتابة كلمة في خانة البحث أولاً!"
+        text: "الرجاء كتابة كلمة في خانة البحث أولاً (مثل: Hospitality أو مستشفى أو Resilience)",
       });
       return;
     }
 
     setIsDropdownOpen(false);
-    setIsSearchingAi(true);
 
-    try {
-      const cleanTerm = term.toLowerCase();
+    // 1. Check if the card already exists in the library
+    const existing = flashcards.find(
+      (c) =>
+        c.word.toLowerCase() === term.toLowerCase() ||
+        c.arabicMeaning.toLowerCase() === term.toLowerCase()
+    );
 
-      // 1. التحقق إذا كانت البطاقة موجودة مسبقاً
-      const existing = flashcards.find(
-        (c) =>
-          c.word.toLowerCase() === cleanTerm ||
-          c.arabicMeaning.toLowerCase() === cleanTerm
-      );
-
-      if (existing) {
-        soundFX.playSuccess();
-        setSelectedCategory("all");
-        setSearchQuery(existing.word);
-        scrollToCard(existing.id);
-        setStatusMessage({
-          type: "info",
-          text: `✨ الكلمة "${existing.word}" موجودة مسبقاً في القاموس!`
-        });
-        setIsSearchingAi(false);
-        return;
-      }
-
-      // 2. إنشاء البطاقة الذكية الجديدة مع صورة افتراضية آمنة وسريعة
-      const newCard = {
-        id: Date.now(),
-        word: cleanTerm,
-        arabicMeaning: `معنى وتفسير: ${cleanTerm}`,
-        arabicPhonetics: `/ai-${cleanTerm}/`,
-        category: "ذكاء اصطناعي",
-        imageUrl: `https://images.unsplash.com/photo-1546549032-9571cd6b27df?w=400`,
-        exampleEn: `Example sentence for learning ${cleanTerm}.`,
-        exampleAr: `مثال توضيحي لتعلم الكلمة ${cleanTerm}.`,
-        partOfSpeech: "noun"
-      };
-
-      // 3. دمج البطاقة الجديدة مع البطاقات الحالية وحفظها محلياً
-      const updatedFlashcards = [newCard, ...flashcards];
-      setFlashcards(updatedFlashcards);
-      localStorage.setItem("user_custom_flashcards", JSON.stringify(updatedFlashcards));
-
+    if (existing) {
       soundFX.playSuccess();
       setSelectedCategory("all");
-      setSearchQuery(cleanTerm);
-      scrollToCard(newCard.id);
-
+      setSearchQuery(existing.word);
+      scrollToCard(existing.id);
       setStatusMessage({
         type: "info",
-        text: `✨ تم توليد وحفظ بطاقة "${cleanTerm}" بنجاح!`
+        text: `✨ الكلمة "${existing.word}" (${existing.arabicMeaning}) موجودة بالفعل في البطاقات! تم تحديدها لك.`,
       });
-
-    } catch (err) {
-      console.error("AI Lookup Error:", err);
-      setStatusMessage({
-        type: "error",
-        text: "حدث خطأ أثناء التوليد، يرجى المحاولة مرة أخرى."
-      });
-    } finally {
-      setIsSearchingAi(false);
-    }
-  };
       return;
     }
 
@@ -292,6 +246,7 @@ export const FlashcardsView: React.FC<FlashcardsViewProps> = ({
     } finally {
       setIsSearchingAi(false);
     }
+  };
 
   // Start Quiz
   const startQuiz = () => {
@@ -344,7 +299,7 @@ export const FlashcardsView: React.FC<FlashcardsViewProps> = ({
       .sort(() => 0.5 - Math.random())
       .slice(0, 3);
     return [card.word, ...distractors].sort(() => 0.5 - Math.random());
-  
+  };
 
   const currentOptions = currentQuizCard ? generateOptions(currentQuizCard) : [];
 
@@ -918,4 +873,4 @@ export const FlashcardsView: React.FC<FlashcardsViewProps> = ({
       )}
     </div>
   );
-}
+};
