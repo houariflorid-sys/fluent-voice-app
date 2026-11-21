@@ -1,1 +1,124 @@
+name: Build Fluent Voice APK
 
+on:
+  workflow_dispatch:
+  push:
+    branches: [ main, master ]
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-java@v4
+        with:
+          distribution: 'temurin'
+          java-version: '17'
+
+      - uses: subosito/flutter-action@v2
+        with:
+          channel: 'stable'
+
+      - name: Create WebView Wrapper App
+        run: |
+          sudo apt-get update -qq && sudo apt-get install -y -qq imagemagick
+          yes | "${ANDROID_HOME:-$ANDROID_SDK_ROOT}/cmdline-tools/latest/bin/sdkmanager" --licenses >/dev/null 2>&1 || true
+
+          flutter create --org com.fluent.voice --platforms android fluent_wrapper
+
+          cat << 'EOF' > fluent_wrapper/lib/main.dart
+          import 'package:flutter/material.dart';
+          import 'package:permission_handler/permission_handler.dart';
+          import 'package:webview_flutter/webview_flutter.dart';
+
+          const String appUrl = 'https://fluent-voice-app.onrender.com/';
+
+          void main() {
+            runApp(const FluentVoiceWrapperApp());
+          }
+
+          class FluentVoiceWrapperApp extends StatelessWidget {
+            const FluentVoiceWrapperApp({super.key});
+
+            @override
+            Widget build(BuildContext context) {
+              return MaterialApp(
+                title: 'Fluent Voice',
+                debugShowCheckedModeBanner: false,
+                theme: ThemeData.dark(),
+                home: const FluentWebScreen(),
+              );
+            }
+          }
+
+          class FluentWebScreen extends StatefulWidget {
+            const FluentWebScreen({super.key});
+
+            @override
+            State<FluentWebScreen> createState() => _FluentWebScreenState();
+          }
+
+          class _FluentWebScreenState extends State<FluentWebScreen> {
+            late final WebViewController _controller;
+
+            @override
+            void initState() {
+              super.initState();
+              _initApp();
+            }
+
+            Future<void> _initApp() async {
+              await Permission.microphone.request();
+              if (!mounted) return;
+              setState(() {
+                _controller = WebViewController()
+                  ..setJavaScriptMode(JavaScriptMode.unrestricted)
+                  ..loadRequest(Uri.parse(appUrl));
+              });
+            }
+
+            @override
+            Widget build(BuildContext context) {
+              return Scaffold(
+                body: SafeArea(
+                  child: WebViewWidget(controller: _controller),
+                ),
+              );
+            }
+          }
+          EOF
+
+          cd fluent_wrapper
+          flutter pub add webview_flutter permission_handler
+
+          if [ -f android/app/build.gradle.kts ]; then
+            sed -i -E 's/(^[[:space:]]*)compileSdk[[:space:]]*=[[:space:]]*[^[:space:]]+/\1compileSdk = 37/' android/app/build.gradle.kts
+          fi
+          if [ -f android/app/build.gradle ]; then
+            sed -i -E 's/(^[[:space:]]*)compileSdk[[:space:]]*=[[:space:]]*[^[:space:]]+/\1compileSdk = 37/' android/app/build.gradle
+            sed -i -E 's/(^[[:space:]]*)compileSdkVersion[[:space:]]+[^[:space:]]+/\1compileSdkVersion 37/' android/app/build.gradle
+          fi
+
+          sed -i 's/<application/<uses-permission android:name="android.permission.INTERNET" \/>\n    <uses-permission android:name="android.permission.RECORD_AUDIO" \/>\n    <uses-permission android:name="android.permission.MODIFY_AUDIO_SETTINGS" \/>\n    <application/' android/app/src/main/AndroidManifest.xml
+          sed -i 's/android:label="fluent_wrapper"/android:label="Fluent Voice"/' android/app/src/main/AndroidManifest.xml
+
+          SRC_IMG=$(find .. -maxdepth 1 -iname "icon.*" | head -n 1)
+          if [ -n "$SRC_IMG" ]; then
+            rm -rf android/app/src/main/res/mipmap-anydpi*
+            for dir in android/app/src/main/res/mipmap-*; do
+              rm -f "$dir"/ic_launcher.*
+              convert "$SRC_IMG" -resize 192x192 PNG32:"$dir/ic_launcher.png"
+            done
+          fi
+
+      - name: Build APK
+        run: |
+          cd fluent_wrapper
+          flutter build apk --release --no-tree-shake-icons
+
+      - name: Upload APK
+        uses: actions/upload-artifact@v4
+        with:
+          name: Fluent-Voice-APK
+          path: fluent_wrapper/build/app/outputs/flutter-apk/app-release.apk
