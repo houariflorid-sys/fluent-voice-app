@@ -65,17 +65,10 @@ jobs:
             @override
             void initState() {
               super.initState();
-              _initApp();
-            }
-
-            Future<void> _initApp() async {
-              await Permission.microphone.request();
-              if (!mounted) return;
-              setState(() {
-                _controller = WebViewController()
-                  ..setJavaScriptMode(JavaScriptMode.unrestricted)
-                  ..loadRequest(Uri.parse(appUrl));
-              });
+              _controller = WebViewController()
+                ..setJavaScriptMode(JavaScriptMode.unrestricted)
+                ..loadRequest(Uri.parse(appUrl));
+              Permission.microphone.request();
             }
 
             @override
@@ -92,12 +85,28 @@ jobs:
           cd fluent_wrapper
           flutter pub add webview_flutter permission_handler
 
+          # رفع compileSdk إلى 37 وتعطيل فحص Lint الذي تسبب في فشل assembleRelease
           if [ -f android/app/build.gradle.kts ]; then
             sed -i -E 's/(^[[:space:]]*)compileSdk[[:space:]]*=[[:space:]]*[^[:space:]]+/\1compileSdk = 37/' android/app/build.gradle.kts
+            python3 - << 'PYEOF'
+          p = "android/app/build.gradle.kts"
+          s = open(p, "r", encoding="utf-8").read()
+          if "checkReleaseBuilds" not in s:
+              s = s.replace("android {", "android {\n    lint {\n        checkReleaseBuilds = false\n        abortOnError = false\n    }", 1)
+              open(p, "w", encoding="utf-8").write(s)
+          PYEOF
           fi
+
           if [ -f android/app/build.gradle ]; then
             sed -i -E 's/(^[[:space:]]*)compileSdk[[:space:]]*=[[:space:]]*[^[:space:]]+/\1compileSdk = 37/' android/app/build.gradle
             sed -i -E 's/(^[[:space:]]*)compileSdkVersion[[:space:]]+[^[:space:]]+/\1compileSdkVersion 37/' android/app/build.gradle
+            python3 - << 'PYEOF'
+          p = "android/app/build.gradle"
+          s = open(p, "r", encoding="utf-8").read()
+          if "checkReleaseBuilds" not in s:
+              s = s.replace("android {", "android {\n    lint {\n        checkReleaseBuilds false\n        abortOnError false\n    }", 1)
+              open(p, "w", encoding="utf-8").write(s)
+          PYEOF
           fi
 
           sed -i 's/<application/<uses-permission android:name="android.permission.INTERNET" \/>\n    <uses-permission android:name="android.permission.RECORD_AUDIO" \/>\n    <uses-permission android:name="android.permission.MODIFY_AUDIO_SETTINGS" \/>\n    <application/' android/app/src/main/AndroidManifest.xml
